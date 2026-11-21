@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ShadowList utils browser fixture</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "shadowlist-wasm": "/packages/shadowlist-wasm/dist/index.js",
+          "shadowlist-wasm/loader": "/packages/shadowlist-wasm/dist/ShadowListWasmLoader.js",
+          "shadowlist-wasm-utils": "/packages/shadowlist-wasm-utils/dist/index.js"
+        }
+      }
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font: 14px/1.4 sans-serif;
+      }
+      .list {
+        width: 400px;
+        height: 600px;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      /*
+       * The page browser.test.ts drives. It loads the kit and leaves the utilities to the test,
+       * which checks that they load on their own.
+       */
+      import { loadShadowListKit } from 'shadowlist-wasm';
+
+      await loadShadowListKit();
+      // Resolves once the frame painted, with the DOM the reader saw.
+      const painted = () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => setTimeout(resolve, 0))
+        );
+      window.frames = async (count) => {
+        for (let frame = 0; frame < count; ++frame) await painted();
+      };
+      window.fixtureReady = true;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+**/node_modules
+**/lib
+**/dist
+**/build
+**/coverage
+**/vendor
+.yarn
+yarn.lock
+examples/shadowlist-fabric-example/android
+examples/shadowlist-fabric-example/ios
+examples/shadowlist-macos-example/macos
+packages/shadowlist-android-utils/**/.cxx
+packages/shadowlist-android-utils/**/build
+# Gradle keeps the Kotlin daemon's session files here while it runs.
+**/.kotlin
+**/Pods
+# README tables use compact Markdown.
+**/README.md
+# The jest vector tests write the vector files, with UPDATE_VECTORS=1.
+packages/shadowlist-utils-core-tests/vectors

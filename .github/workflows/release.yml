@@ -1,0 +1,140 @@
+# Publishing cannot succeed yet. The pod depends on ShadowListKit ~> version.json "shadowlist" from
+# CocoaPods trunk, and the Maven POM depends on io.github.azimgd:shadowlist-kit at
+# SHADOWLIST_KIT_VERSION. The newest engine release is v0.8.x, which has neither that kit version
+# nor the API these templates call. Release the engine first, then point SHADOWLIST_ENGINE_REF in
+# packages/shadowlist-android-utils/ShadowListUtils/gradle.properties at the commit it was
+# released from.
+#
+# The tag is v<version> from packages/shadowlist-uikit-utils/version.json. The npm package
+# shadowlist-utils has its own version and is published by hand with yarn release:utils.
+name: Release templates
+on:
+  push:
+    tags:
+      - 'v*'
+
+defaults:
+  run:
+    working-directory: shadowlist-templates
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Check the versions match the tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          POD=$(node -p "require('./packages/shadowlist-uikit-utils/version.json').version")
+          POD_KIT=$(node -p "require('./packages/shadowlist-uikit-utils/version.json').shadowlist")
+          GRADLE=$(sed -n 's/^VERSION_NAME=//p' packages/shadowlist-android-utils/ShadowListUtils/gradle.properties)
+          GRADLE_KIT=$(sed -n 's/^SHADOWLIST_KIT_VERSION=//p' packages/shadowlist-android-utils/ShadowListUtils/gradle.properties)
+          echo "tag $TAG, pod $POD (kit $POD_KIT), gradle $GRADLE (kit $GRADLE_KIT)"
+          if [ "$TAG" != "$POD" ] || [ "$TAG" != "$GRADLE" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version.json ($POD) and VERSION_NAME ($GRADLE)"
+            exit 1
+          fi
+          if [ "$POD_KIT" != "$GRADLE_KIT" ]; then
+            echo "::error::version.json names kit $POD_KIT and SHADOWLIST_KIT_VERSION names $GRADLE_KIT"
+            exit 1
+          fi
+
+  ios:
+    needs: check-version
+    runs-on: macos-15
+    env:
+      COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+        with:
+          node: 'false'
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build ShadowListUtils with SwiftPM
+        env:
+          SHADOWLIST_ROOT: ${{ github.workspace }}/shadowlist
+        run: >-
+          xcodebuild -scheme ShadowListUtils
+          -destination 'generic/platform=iOS'
+          CODE_SIGNING_ALLOWED=NO build
+
+      - name: Lint the podspec
+        env:
+          SHADOWLIST_ROOT: ${{ github.workspace }}/shadowlist
+        run: pod lib lint ShadowListUtils.podspec --allow-warnings --include-podspecs=../shadowlist/ShadowListKit.podspec
+
+      # SHADOWLIST_ROOT stays unset here. When set, the podspec bakes the local engine path into the published spec.
+      - name: Push to CocoaPods trunk
+        run: |
+          if [ -z "$COCOAPODS_TRUNK_TOKEN" ]; then
+            echo "::notice::COCOAPODS_TRUNK_TOKEN is not set. Skipping pod trunk push."
+            exit 0
+          fi
+          unset SHADOWLIST_ROOT
+          pod trunk push ShadowListUtils.podspec --allow-warnings --synchronous
+
+  android:
+    needs: check-version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shadowlist-templates/packages/shadowlist-android-utils
+    env:
+      SHADOWLIST_ROOT: ${{ github.workspace }}/shadowlist
+      MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+      MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+      SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
+      SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      # The engine checks out at SHADOWLIST_ENGINE_REF. The JNI library builds against its core headers.
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+        with:
+          node: 'false'
+
+      - name: Install JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Finalize Android SDK
+        run: |
+          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Build ShadowListUtils
+        run: ./gradlew --no-daemon --console=plain :ShadowListUtils:assembleRelease
+
+      # The POM depends on the kit by its Maven coordinates. The engine repository publishes the kit.
+      - name: Publish to Maven Central
+        run: |
+          if [ -z "$MAVEN_CENTRAL_USERNAME" ] || [ -z "$MAVEN_CENTRAL_PASSWORD" ] || [ -z "$SIGNING_KEY" ]; then
+            echo "::notice::MAVEN_CENTRAL_USERNAME, MAVEN_CENTRAL_PASSWORD or SIGNING_KEY is not set. Skipping Maven Central."
+            exit 0
+          fi
+          export ORG_GRADLE_PROJECT_mavenCentralUsername="$MAVEN_CENTRAL_USERNAME"
+          export ORG_GRADLE_PROJECT_mavenCentralPassword="$MAVEN_CENTRAL_PASSWORD"
+          export ORG_GRADLE_PROJECT_signingInMemoryKey="$SIGNING_KEY"
+          if [ -n "$SIGNING_KEY_ID" ]; then export ORG_GRADLE_PROJECT_signingInMemoryKeyId="$SIGNING_KEY_ID"; fi
+          if [ -n "$SIGNING_KEY_PASSWORD" ]; then export ORG_GRADLE_PROJECT_signingInMemoryKeyPassword="$SIGNING_KEY_PASSWORD"; fi
+          ./gradlew --no-daemon --console=plain :ShadowListUtils:publishAndReleaseToMavenCentral

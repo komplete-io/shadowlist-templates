@@ -1,0 +1,104 @@
+# Generate with ./generate.sh, which sets SHADOWLIST_ROOT to ../../../shadowlist when it is unset
+# and passes it on relative to this folder.
+# The kit and the core come from that engine checkout, the templates from this repository.
+name: ShadowListKitExample
+options:
+  bundleIdPrefix: shadowlist
+  deploymentTarget:
+    iOS: '16.0'
+  createIntermediateGroups: false
+settings:
+  base:
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: '5.0'
+    CLANG_CXX_LANGUAGE_STANDARD: c++20
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  ShadowListKit:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: ${SHADOWLIST_ROOT}/packages/shadowlist-uikit/Sources/ShadowListKit/include/ShadowListKit
+        headerVisibility: public
+      - path: ${SHADOWLIST_ROOT}/packages/shadowlist-uikit/Sources/ShadowListKit/Internal
+        headerVisibility: project
+      - path: ${SHADOWLIST_ROOT}/packages/shadowlist-uikit/Sources/ShadowListKit
+        includes: ['*.mm']
+      - path: ${SHADOWLIST_ROOT}/packages/shadowlist-core
+        includes: ['*.cpp', 'host/*.cpp']
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: shadowlist.kit
+        DEFINES_MODULE: YES
+        HEADER_SEARCH_PATHS: ['$(SRCROOT)/${SHADOWLIST_ROOT}/packages']
+        CLANG_ENABLE_OBJC_ARC: YES
+        GENERATE_INFOPLIST_FILE: YES
+  ShadowListUtilsCore:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: ../../packages/shadowlist-uikit-utils/Sources/ShadowListUtilsCore/include/ShadowListUtilsCore
+        headerVisibility: public
+      - path: ../../packages/shadowlist-uikit-utils/Sources/ShadowListUtilsCore
+        includes: ['*.mm']
+      - path: ../../packages/shadowlist-utils-core
+        includes: ['*.cpp']
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: shadowlist.utils.core
+        DEFINES_MODULE: YES
+        HEADER_SEARCH_PATHS:
+          [
+            '$(SRCROOT)/../../packages',
+            '$(SRCROOT)/${SHADOWLIST_ROOT}/packages',
+          ]
+        CLANG_ENABLE_OBJC_ARC: YES
+        GENERATE_INFOPLIST_FILE: YES
+  ShadowListUtils:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: ../../packages/shadowlist-uikit-utils/Sources/ShadowListUtils
+    dependencies:
+      - target: ShadowListKit
+      - target: ShadowListUtilsCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: shadowlist.utils
+        DEFINES_MODULE: YES
+        SWIFT_VERSION: '5.9'
+        GENERATE_INFOPLIST_FILE: YES
+  ShadowListKitExample:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ${SHADOWLIST_ROOT}/packages/shadowlist-uikit/Bench/ShadowListKitBench.m
+    dependencies:
+      - target: ShadowListKit
+      - target: ShadowListUtilsCore
+      - target: ShadowListUtils
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: SL UIKit
+        UILaunchScreen: {}
+        CADisableMinimumFrameDurationOnPhone: true
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: shadowlist.uikit.example
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Bridging.h
+        HEADER_SEARCH_PATHS:
+          ['$(SRCROOT)/${SHADOWLIST_ROOT}/packages/shadowlist-uikit/Bench']
+        OTHER_LDFLAGS: ['-ObjC', '-lc++']
+        TARGETED_DEVICE_FAMILY: '1'

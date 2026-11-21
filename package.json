@@ -1,0 +1,45 @@
+{
+  "name": "shadowlist-templates",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Templates, visual components and example apps for shadowlist.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/komplete-io/shadowlist-templates.git"
+  },
+  "packageManager": "yarn@4.11.0",
+  "workspaces": [
+    "packages/shadowlist-utils",
+    "packages/shadowlist-wasm-utils",
+    "examples/shadowlist-fabric-example",
+    "examples/shadowlist-macos-example"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc -p packages/shadowlist-utils/tsconfig.json && tsc -p examples/shadowlist-fabric-example/tsconfig.json && tsc -p examples/shadowlist-macos-example/tsconfig.json --noEmit && yarn workspace shadowlist-wasm-utils run typecheck",
+    "typecheck:web": "tsc -p examples/shadowlist-web-example/tsconfig.json --noEmit",
+    "test": "yarn workspace shadowlist-utils run test",
+    "test:core": "cmake -S packages/shadowlist-utils-core-tests -B packages/shadowlist-utils-core-tests/build && cmake --build packages/shadowlist-utils-core-tests/build && ctest --test-dir packages/shadowlist-utils-core-tests/build --output-on-failure",
+    "build": "yarn workspace shadowlist-utils run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "release:utils": "yarn workspace shadowlist-utils npm publish --tolerate-republish"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^2.0.3",
+    "@eslint/eslintrc": "^3.3.5",
+    "@eslint/js": "^10.0.1",
+    "@evilmartians/lefthook": "^1.12.3",
+    "@react-native/eslint-config": "0.85.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.2"
+  },
+  "resolutions": {
+    "on-headers": "^1.1.0"
+  }
+}

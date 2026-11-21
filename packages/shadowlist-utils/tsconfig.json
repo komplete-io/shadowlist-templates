@@ -1,0 +1,44 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "shadowlist": [
+        "../../../shadowlist/packages/shadowlist-fabric/src/index"
+      ],
+      "react": [
+        "../../examples/shadowlist-fabric-example/node_modules/@types/react"
+      ],
+      "react/*": [
+        "../../examples/shadowlist-fabric-example/node_modules/@types/react/*"
+      ],
+      "react-test-renderer": [
+        "../../examples/shadowlist-fabric-example/node_modules/@types/react-test-renderer"
+      ],
+      "react-native": [
+        "../../examples/shadowlist-fabric-example/node_modules/react-native/types_generated/index.d.ts"
+      ],
+      "react-native-gesture-handler": [
+        "../../examples/shadowlist-fabric-example/node_modules/react-native-gesture-handler"
+      ],
+      "react-native-reanimated": [
+        "../../examples/shadowlist-fabric-example/node_modules/react-native-reanimated"
+      ],
+      "react-native-safe-area-context": [
+        "../../examples/shadowlist-fabric-example/node_modules/react-native-safe-area-context"
+      ]
+    },
+    "customConditions": ["react-native-strict-api"],
+    "jsx": "react-jsx",
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "target": "ESNext",
+    "types": ["jest", "node"],
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src"],
+  "exclude": ["lib"]
+}

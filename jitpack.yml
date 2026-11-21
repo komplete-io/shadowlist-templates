@@ -1,0 +1,11 @@
+jdk:
+  - openjdk17
+before_install:
+  - yes | sdkmanager --licenses > /dev/null || true
+  - yes | sdkmanager "ndk;27.1.12297006" "cmake;3.22.1"
+# The JNI library needs the engine's core headers. The engine clones at SHADOWLIST_ENGINE_REF from
+# packages/shadowlist-android-utils/ShadowListUtils/gradle.properties. The kit is not published here:
+# the POM depends on io.github.azimgd:shadowlist-kit from Maven Central.
+install:
+  - ENGINE_REF=$(sed -n 's/^SHADOWLIST_ENGINE_REF=//p' packages/shadowlist-android-utils/ShadowListUtils/gradle.properties) && git init -q "$HOME/shadowlist-engine" && git -C "$HOME/shadowlist-engine" fetch -q --depth 1 https://github.com/azimgd/shadowlist "$ENGINE_REF" && git -C "$HOME/shadowlist-engine" checkout -q FETCH_HEAD
+  - (cd packages/shadowlist-android-utils && SHADOWLIST_ROOT="$HOME/shadowlist-engine" ./gradlew --no-daemon --console=plain :ShadowListUtils:publishToMavenLocal)

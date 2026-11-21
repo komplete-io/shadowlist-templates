@@ -1,0 +1,49 @@
+{
+  "name": "shadowlist-wasm-utils",
+  "version": "0.10.0",
+  "description": "Template helpers for shadowlist-wasm lists: avatars, poll tallies and relative times, computed by the shared shadowlist utils C++ core compiled to WebAssembly.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./shadowlistutils.wasm": "./dist/shadowlistutils.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "cpp",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "bash build.sh",
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --import ./test/resolve-shadowlist-wasm.ts --test test/*.test.ts",
+    "typecheck": "../../node_modules/.bin/tsc --noEmit -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "shadowlist-wasm": "^0.10.0"
+  },
+  "keywords": [
+    "list",
+    "virtualized-list",
+    "webassembly",
+    "wasm",
+    "shadowlist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/komplete-io/shadowlist-templates.git",
+    "directory": "packages/shadowlist-wasm-utils"
+  },
+  "author": "azimgd <me@azimgd.com> (https://github.com/azimgd)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/komplete-io/shadowlist-templates/issues"
+  },
+  "homepage": "https://github.com/komplete-io/shadowlist-templates#readme"
+}

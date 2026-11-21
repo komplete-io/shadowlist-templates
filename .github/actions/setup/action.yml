@@ -1,0 +1,84 @@
+name: Setup
+description: Check out the shadowlist engine beside this repository, then set up Node.js and install workspace dependencies
+
+# The jobs check this repository out at shadowlist-templates and the engine at shadowlist, both
+# in the workspace. The engine then sits at ../shadowlist from this repository's root, the
+# location the TypeScript paths and both Podfile.lock files record. The jobs also set
+# SHADOWLIST_ROOT to it. The engine ref is SHADOWLIST_ENGINE_REF in
+# packages/shadowlist-android-utils/ShadowListUtils/gradle.properties, which jitpack.yml and the
+# release builds read too.
+
+inputs:
+  node:
+    description: Set up Node.js and install the dependencies of this repository. The native-only jobs pass 'false'.
+    required: false
+    default: 'true'
+  engine-install:
+    description: Also install the engine's dependencies. Building the engine library or its wasm kit needs them.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Read the engine ref
+      id: engine
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        REF=$(sed -n 's/^SHADOWLIST_ENGINE_REF=//p' shadowlist-templates/packages/shadowlist-android-utils/ShadowListUtils/gradle.properties)
+        if [ -z "$REF" ]; then
+          echo "::error::SHADOWLIST_ENGINE_REF is missing from ShadowListUtils/gradle.properties"
+          exit 1
+        fi
+        echo "engine ref $REF"
+        echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout the engine
+      uses: actions/checkout@v4
+      with:
+        repository: azimgd/shadowlist
+        ref: ${{ steps.engine.outputs.ref }}
+        path: shadowlist
+
+    - name: Setup Node.js
+      if: inputs.node == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: shadowlist-templates/.nvmrc
+
+    - name: Cache dependencies
+      if: inputs.node == 'true'
+      id: yarn-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          shadowlist-templates/**/node_modules
+          shadowlist-templates/.yarn/install-state.gz
+        key: ${{ runner.os }}-yarn-${{ hashFiles('shadowlist-templates/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-yarn-
+
+    - name: Install dependencies
+      if: inputs.node == 'true' && steps.yarn-cache.outputs.cache-hit != 'true'
+      run: yarn install --immutable
+      shell: bash
+      working-directory: ${{ github.workspace }}/shadowlist-templates
+
+    - name: Cache engine dependencies
+      if: inputs.node == 'true' && inputs.engine-install == 'true'
+      id: engine-yarn-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          shadowlist/**/node_modules
+          shadowlist/.yarn/install-state.gz
+        key: ${{ runner.os }}-yarn-engine-${{ hashFiles('shadowlist/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-yarn-engine-
+
+    - name: Install engine dependencies
+      if: inputs.node == 'true' && inputs.engine-install == 'true' && steps.engine-yarn-cache.outputs.cache-hit != 'true'
+      run: yarn install --immutable
+      shell: bash
+      working-directory: ${{ github.workspace }}/shadowlist

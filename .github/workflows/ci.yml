@@ -1,0 +1,322 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+
+# Every job checks this repository out at shadowlist-templates. The setup action checks the
+# engine out beside it at shadowlist.
+env:
+  SHADOWLIST_ROOT: ${{ github.workspace }}/shadowlist
+
+defaults:
+  run:
+    working-directory: shadowlist-templates
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+        with:
+          engine-install: 'true'
+
+      - name: Lint files
+        run: yarn lint
+
+      - name: Check formatting
+        run: yarn format:check
+
+      # yarn typecheck runs in test-wasm. It includes shadowlist-wasm-utils, which needs the engine's wasm build.
+      - name: Run unit tests
+        run: yarn test --maxWorkers=2
+
+      # The utils declarations build against the engine package's lib/typescript output.
+      - name: Build the engine library
+        working-directory: shadowlist
+        run: yarn workspace shadowlist run prepare
+
+      - name: Build utils package
+        run: yarn build
+
+  test-core:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shadowlist-templates/packages/shadowlist-utils-core-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+        with:
+          node: 'false'
+
+      - name: Build core tests
+        run: |
+          cmake -S . -B build
+          cmake --build build
+
+      - name: Run core tests
+        run: ctest --test-dir build --output-on-failure
+
+      # The fuzz tests run on one thread and are left out here. The step above runs them.
+      - name: Run core tests (ThreadSanitizer)
+        run: |
+          cmake -S . -B build-tsan -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+          cmake --build build-tsan
+          SLT_SKIP=fuzz_ ./build-tsan/shadowlist_utils_core_tests
+
+  test-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+        with:
+          engine-install: 'true'
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 5.0.7
+
+      - name: Build the engine wasm kit
+        working-directory: shadowlist
+        run: yarn build:wasm
+
+      - name: Build wasm utils package
+        run: yarn workspace shadowlist-wasm-utils run build
+
+      - name: Typecheck files
+        run: yarn typecheck
+
+      - name: Typecheck the web example
+        run: yarn typecheck:web
+
+      # The browser tests use the runner's Google Chrome. CHROME_PATH picks another binary.
+      - name: Run wasm utils tests
+        run: yarn workspace shadowlist-wasm-utils run test
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+
+      - name: Install JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Finalize Android SDK
+        run: |
+          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/wrapper
+            ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('shadowlist-templates/examples/shadowlist-fabric-example/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build example for Android
+        env:
+          JAVA_OPTS: '-XX:MaxHeapSize=6g'
+        run: yarn workspace shadowlist-example run build:android
+
+  build-ios:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: shadowlist-templates/examples/shadowlist-fabric-example
+
+      - name: Cache cocoapods
+        uses: actions/cache@v4
+        with:
+          path: |
+            shadowlist-templates/examples/shadowlist-fabric-example/ios/Pods
+          key: ${{ runner.os }}-cocoapods-${{ hashFiles('shadowlist-templates/examples/shadowlist-fabric-example/ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-
+
+      - name: Build example for iOS
+        run: yarn workspace shadowlist-example run build:ios --force-pods
+
+  build-macos:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: shadowlist-templates/examples/shadowlist-fabric-example
+
+      - name: Install macOS pods
+        working-directory: shadowlist-templates/examples/shadowlist-macos-example/macos
+        env:
+          BUNDLE_GEMFILE: ../../shadowlist-fabric-example/Gemfile
+        run: bundle exec pod install --deployment
+
+      - name: Build macOS example
+        working-directory: shadowlist-templates/examples/shadowlist-macos-example/macos
+        run: >-
+          xcodebuild -workspace ShadowListMacOS.xcworkspace
+          -scheme ShadowListMacOS-macOS -configuration Release
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO build
+
+  build-swift:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+        with:
+          node: 'false'
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # The example apps' generate.sh makes their Xcode projects from project.yml.
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, entries in devices.items() if "iOS" in runtime for d in entries if d["name"].startswith("iPhone")))
+          ')
+          echo "simulator $UDID"
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Build ShadowListUtils with SwiftPM
+        run: >-
+          xcodebuild -scheme ShadowListUtils
+          -destination 'generic/platform=iOS Simulator'
+          build
+
+      - name: Run ShadowListUtils tests
+        timeout-minutes: 30
+        working-directory: shadowlist-templates/packages/shadowlist-uikit-utils
+        run: >-
+          xcodebuild test -scheme ShadowListUtilsTests-Package
+          -destination "id=$SIM_UDID"
+
+      - name: Build UIKit example
+        run: examples/shadowlist-uikit-example/build.sh sim "$SIM_UDID"
+
+      - name: Build AppKit example
+        run: examples/shadowlist-appkit-example/build.sh mac
+
+      # A development ShadowListKit pod has no copy under PODS_ROOT. SHADOWLIST_ROOT points the lint at the engine.
+      - name: Lint the podspec
+        run: pod lib lint ShadowListUtils.podspec --allow-warnings --include-podspecs=../shadowlist/ShadowListKit.podspec
+
+  build-android-utils:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: shadowlist-templates
+
+      - name: Setup
+        uses: ./shadowlist-templates/.github/actions/setup
+        with:
+          node: 'false'
+
+      - name: Install JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Finalize Android SDK
+        run: |
+          /bin/bash -c "yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/wrapper
+            ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-utils-${{ hashFiles('shadowlist-templates/packages/shadowlist-android-utils/gradle/wrapper/gradle-wrapper.properties', 'shadowlist-templates/packages/shadowlist-android-utils/**/*.gradle.kts', 'shadowlist-templates/examples/shadowlist-android-example/gradle/wrapper/gradle-wrapper.properties', 'shadowlist-templates/examples/shadowlist-android-example/**/*.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-utils-
+
+      - name: Build ShadowListUtils
+        working-directory: shadowlist-templates/packages/shadowlist-android-utils
+        run: ./gradlew --no-daemon --console=plain :ShadowListUtils:assembleDebug :ShadowListUtils:assembleDebugAndroidTest
+
+      - name: Build Android example
+        working-directory: shadowlist-templates/examples/shadowlist-android-example
+        run: ./gradlew --no-daemon --console=plain :app:assembleDebug
