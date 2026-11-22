@@ -1,14 +1,15 @@
+# The yarn workspace root is the repo root.
 pre-commit:
   parallel: true
-  commands:
-    lint:
+  jobs:
+    - name: lint
       glob: '*.{js,cjs,mjs,ts,tsx}'
       run: yarn eslint --no-warn-ignored --max-warnings 0 {staged_files}
-    format:
+    - name: format
       glob: '*.{js,cjs,mjs,ts,tsx,json,md,yml,yaml}'
-      run: yarn prettier --check {staged_files}
+      run: node_modules/.bin/prettier --check --config .prettierrc --ignore-path .gitignore --ignore-path .prettierignore {staged_files}
 
 pre-push:
-  commands:
-    typecheck:
+  jobs:
+    - name: typecheck
       run: yarn typecheck

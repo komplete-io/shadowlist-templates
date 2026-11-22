@@ -20,7 +20,7 @@ fi
 command -v emcmake >/dev/null || { echo "BUILD FAILED: emcmake not found, install emsdk"; exit 1; }
 # TypeScript from this repository, or from the engine checkout before yarn install ran here.
 TSC="$REPO/node_modules/.bin/tsc"
-[[ -x "$TSC" ]] || TSC="$SHADOWLIST_ROOT/node_modules/.bin/tsc"
+[[ -x "$TSC" ]] || TSC="$SHADOWLIST_ROOT/packages/node_modules/.bin/tsc"
 [[ -x "$TSC" ]] || { echo "BUILD FAILED: tsc not found, run yarn install"; exit 1; }
 mkdir -p "$HERE/build" "$HERE/dist"
 {

@@ -6,7 +6,7 @@ The web routes of the templates on [`shadowlist-wasm`](https://github.com/azimgd
 
 ```sh
 # in the engine checkout
-yarn build:wasm
+make build-wasm
 # here
 cd examples/shadowlist-web-example
 npm run build   # or: ../../packages/shadowlist-wasm-utils/build.sh && ../../node_modules/.bin/tsc -b

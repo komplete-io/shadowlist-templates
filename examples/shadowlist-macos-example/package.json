@@ -5,8 +5,7 @@
   "scripts": {
     "macos": "react-native run-macos",
     "start": "react-native start",
-    "build:macos": "react-native build-macos --mode Debug",
-    "pods": "pod install --project-directory=macos"
+    "build:macos": "react-native build-macos --mode Debug"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",

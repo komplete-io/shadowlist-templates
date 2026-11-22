@@ -18,8 +18,8 @@ React Native CLI, and stops with an error when the folder is missing. TypeScript
 `tsconfig.json` paths always point at `../shadowlist`. With the engine elsewhere, make `../shadowlist` a symlink to
 it. The Podfile.lock files record the pod path of `../shadowlist` as well.
 
-`yarn typecheck:web` reads the engine's `packages/shadowlist-wasm/dist`, built there with `yarn build:wasm`. Building
-`shadowlist-utils` with `yarn build` reads the engine's `packages/shadowlist-fabric/lib`, built there with `yarn build`.
+`make typecheck-web` reads the engine's `packages/shadowlist-wasm/dist`, built there with `make build-wasm`. Building
+`shadowlist-utils` with `make build` reads the engine's `packages/shadowlist-fabric/lib`, built there with `make build`.
 
 ## Repo layout
 
@@ -40,16 +40,24 @@ it. The Podfile.lock files record the pod path of `../shadowlist` as well.
 
 ## Development
 
+`make` at the repo root runs every task. A JS target passes through to the `yarn` script of the same name, with `-`
+for `:` (`make format-check` runs `yarn format:check`).
+
 | Command | What it does |
 | --- | --- |
-| `yarn install` | Installs the workspaces: `shadowlist-utils`, `shadowlist-wasm-utils` and the two React Native apps |
-| `yarn lint` | ESLint over the repo |
-| `yarn typecheck` | TypeScript for `shadowlist-utils`, both React Native apps and `shadowlist-wasm-utils` |
-| `yarn typecheck:web` | TypeScript for the web example |
-| `yarn test` | Jest for `shadowlist-utils` |
-| `yarn test:core` | Builds `packages/shadowlist-utils-core-tests` with CMake and runs it with ctest |
-| `yarn build` | Builds `shadowlist-utils` with bob |
-| `yarn format` | Prettier over the repo. `format:check` only checks. |
+| `make install` | Installs the workspaces: `shadowlist-utils`, `shadowlist-wasm-utils` and the two React Native apps |
+| `make lint` | ESLint over the repo |
+| `make typecheck` | TypeScript for `shadowlist-utils`, both React Native apps and `shadowlist-wasm-utils` |
+| `make typecheck-web` | TypeScript for the web example |
+| `make test` | Jest for `shadowlist-utils` |
+| `make test-wasm` | Node tests for `shadowlist-wasm-utils` against its `dist/` |
+| `make test-core` | Builds `packages/shadowlist-utils-core-tests` with CMake and runs it with ctest |
+| `make test-core-tsan` | The same tests under ThreadSanitizer, without the fuzz tests |
+| `make build` | Builds `shadowlist-utils` with bob |
+| `make build-wasm` | Builds `shadowlist-wasm-utils` with Emscripten and TypeScript |
+| `make format` | Prettier over the repo. `make format-check` only checks. |
+| `make docs-check` | Checks the READMEs' local links, headings and compact tables |
+| `make check` | `lint`, `format-check`, `typecheck`, `docs-check` and `test` |
 
 `UPDATE_VECTORS=1 yarn test` writes the vector files from the TypeScript, after a change both sides make.
 
@@ -66,4 +74,4 @@ source. Neither is a dependency in the apps' `package.json`.
 | `yarn workspace shadowlist-example start` | Metro for the iOS and Android app |
 | `yarn workspace shadowlist-example run build:android` | Debug build of the Android app |
 | `cd examples/shadowlist-fabric-example/ios && pod install` | Installs the iOS pods, then build `ShadowListExample.xcworkspace` in Xcode |
-| `cd examples/shadowlist-macos-example/macos && pod install` | Installs the macOS pods, then build `ShadowListMacOS.xcworkspace` in Xcode |
+| `make pods-macos` | Installs the macOS pods, then build `ShadowListMacOS.xcworkspace` in Xcode |

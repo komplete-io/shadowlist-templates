@@ -82,7 +82,7 @@ avatar, relative-time and poll vectors of `packages/shadowlist-utils-core-tests/
 and checks that the kit's binary exports no utility entry points. `browser.test.ts` drives the web example's Feed
 and Poll in headless Chrome through `test/fixture.html` and checks that each route loads the utilities only when
 it uses them. It is skipped when no Chrome is found or the web example is not built. `CHROME_PATH` picks the
-binary. Run `./build.sh`, the engine's `yarn build:wasm` and the web example's build first.
+binary. Run `./build.sh`, the engine's `make build-wasm` and the web example's build first.
 
 ## Source layout
 
