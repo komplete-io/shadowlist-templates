@@ -34,28 +34,28 @@ jobs:
           engine-install: 'true'
 
       - name: Lint files
-        run: yarn lint
+        run: make lint
 
       - name: Check formatting
-        run: yarn format:check
+        run: make format-check
 
-      # yarn typecheck runs in test-wasm. It includes shadowlist-wasm-utils, which needs the engine's wasm build.
+      - name: Check README links and tables
+        run: make docs-check
+
+      # make typecheck runs in test-wasm. It includes shadowlist-wasm-utils, which needs the engine's wasm build.
       - name: Run unit tests
         run: yarn test --maxWorkers=2
 
       # The utils declarations build against the engine package's lib/typescript output.
       - name: Build the engine library
         working-directory: shadowlist
-        run: yarn workspace shadowlist run prepare
+        run: make build
 
       - name: Build utils package
-        run: yarn build
+        run: make build
 
   test-core:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: shadowlist-templates/packages/shadowlist-utils-core-tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -67,20 +67,12 @@ jobs:
         with:
           node: 'false'
 
-      - name: Build core tests
-        run: |
-          cmake -S . -B build
-          cmake --build build
-
       - name: Run core tests
-        run: ctest --test-dir build --output-on-failure
+        run: make test-core
 
       # The fuzz tests run on one thread and are left out here. The step above runs them.
       - name: Run core tests (ThreadSanitizer)
-        run: |
-          cmake -S . -B build-tsan -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
-          cmake --build build-tsan
-          SLT_SKIP=fuzz_ ./build-tsan/shadowlist_utils_core_tests
+        run: make test-core-tsan
 
   test-wasm:
     runs-on: ubuntu-latest
@@ -102,20 +94,20 @@ jobs:
 
       - name: Build the engine wasm kit
         working-directory: shadowlist
-        run: yarn build:wasm
+        run: make build-wasm
 
       - name: Build wasm utils package
-        run: yarn workspace shadowlist-wasm-utils run build
+        run: make build-wasm
 
       - name: Typecheck files
-        run: yarn typecheck
+        run: make typecheck
 
       - name: Typecheck the web example
-        run: yarn typecheck:web
+        run: make typecheck-web
 
       # The browser tests use the runner's Google Chrome. CHROME_PATH picks another binary.
       - name: Run wasm utils tests
-        run: yarn workspace shadowlist-wasm-utils run test
+        run: make test-wasm
 
   build-android:
     runs-on: ubuntu-latest

@@ -58,8 +58,8 @@ The functions in `packages/shadowlist-utils-core` are the C++ side of templates 
 
 ## Checklist before you finish
 
-- Template logic changed: a new test, and `yarn test:core` passes. CI runs the template logic tests under ThreadSanitizer too, without the fuzz tests.
+- Template logic changed: a new test, and `make test-core` passes. CI runs the template logic tests under ThreadSanitizer too, without the fuzz tests.
 - Native templates changed: the other platform has the same change, and the example apps that use them build.
-- TypeScript changed: `yarn typecheck`, `yarn test` and `yarn lint` pass.
-- Always: `yarn format:check` passes, as CI checks it.
+- TypeScript changed: `make typecheck`, `make test` and `make lint` pass.
+- Always: `make format-check` passes, as CI checks it.
 - A new or renamed public word has its row in the Public API words table.

@@ -55,9 +55,9 @@ runs:
         path: |
           shadowlist-templates/**/node_modules
           shadowlist-templates/.yarn/install-state.gz
-        key: ${{ runner.os }}-yarn-${{ hashFiles('shadowlist-templates/yarn.lock') }}
+        key: ${{ runner.os }}-yarn-shadowlist-templates-${{ hashFiles('shadowlist-templates/yarn.lock') }}
         restore-keys: |
-          ${{ runner.os }}-yarn-
+          ${{ runner.os }}-yarn-shadowlist-templates-
 
     - name: Install dependencies
       if: inputs.node == 'true' && steps.yarn-cache.outputs.cache-hit != 'true'
@@ -71,9 +71,9 @@ runs:
       uses: actions/cache@v4
       with:
         path: |
-          shadowlist/**/node_modules
-          shadowlist/.yarn/install-state.gz
-        key: ${{ runner.os }}-yarn-engine-${{ hashFiles('shadowlist/yarn.lock') }}
+          shadowlist/packages/**/node_modules
+          shadowlist/packages/.yarn/install-state.gz
+        key: ${{ runner.os }}-yarn-engine-${{ hashFiles('shadowlist/packages/yarn.lock') }}
         restore-keys: |
           ${{ runner.os }}-yarn-engine-
 
@@ -81,4 +81,4 @@ runs:
       if: inputs.node == 'true' && inputs.engine-install == 'true' && steps.engine-yarn-cache.outputs.cache-hit != 'true'
       run: yarn install --immutable
       shell: bash
-      working-directory: ${{ github.workspace }}/shadowlist
+      working-directory: ${{ github.workspace }}/shadowlist/packages

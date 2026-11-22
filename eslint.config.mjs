@@ -121,6 +121,7 @@ export default defineConfig([
       '**/babel.config.js',
       '**/metro.config.js',
       '**/react-native.config.js',
+      'scripts/**/*.mjs',
       'eslint.config.mjs',
       'shadowlist.js',
       'examples/shadowlist-fabric-example/index.js',
