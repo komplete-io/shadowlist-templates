@@ -2,7 +2,7 @@ import ShadowListUtils
 import UIKit
 
 /*
- * The fixtures as the items of the library's templates. Every screen maps through here.
+ * The fixtures as the items of the library's templates.
  */
 enum Items {
   private static let hourMs = 3_600_000.0

@@ -111,6 +111,8 @@ class ShadowListUtilsLayoutCache {
    */
   internal val count: Int get() = entries.size
 
+  internal fun has(key: String): Boolean = entries.containsKey(key)
+
   private companion object {
     /*
      * How many rows on each side of the given index one prefetch lays out.

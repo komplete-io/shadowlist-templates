@@ -35,6 +35,25 @@ internal object ShadowListUtilsCore {
   const val CHAT_METRIC_SLOTS = 9
 
   /*
+   * The metrics both size specs read: the theme's, with the line heights text is laid out
+   * with, which follow the text size setting.
+   */
+  fun chatMetrics(theme: ShadowListUtilsTheme): DoubleArray {
+    val body = theme.typography.body
+    val metrics = DoubleArray(CHAT_METRIC_SLOTS)
+    metrics[CHAT_METRIC_SPACING_XXS] = theme.spacing.xxs.toDouble()
+    metrics[CHAT_METRIC_SPACING_XS] = theme.spacing.xs.toDouble()
+    metrics[CHAT_METRIC_SPACING_SM] = theme.spacing.sm.toDouble()
+    metrics[CHAT_METRIC_SPACING_MD] = theme.spacing.md.toDouble()
+    metrics[CHAT_METRIC_SPACING_LG] = theme.spacing.lg.toDouble()
+    metrics[CHAT_METRIC_BODY_FONT_SIZE] = body.fontSize.toDouble()
+    metrics[CHAT_METRIC_BODY_LINE_HEIGHT] = body.scaledLineHeightPx().toFloat().dp.toDouble()
+    metrics[CHAT_METRIC_BODY_LETTER_SPACING] = body.letterSpacing.toDouble()
+    metrics[CHAT_METRIC_CAPTION_LINE_HEIGHT] = theme.typography.caption.scaledLineHeightPx().toFloat().dp.toDouble()
+    return metrics
+  }
+
+  /*
    * Slots of chatMessageSizeSpec's out array, the same as ChatOutSlot in the JNI.
    */
   const val CHAT_OUT_INSET_WIDTH = 0
@@ -224,7 +243,6 @@ internal object ShadowListUtilsCore {
     destinationIndex: Int,
   ): IntArray
 
-  val ASSISTANT_USER_BUBBLE_WIDTH_FRACTION: Float get() = constants[CONSTANT_ASSISTANT_USER_BUBBLE_WIDTH_FRACTION].toFloat()
   val ASSISTANT_USER_BUBBLE_PADDING_HORIZONTAL_DP: Float get() = constants[CONSTANT_ASSISTANT_USER_BUBBLE_PADDING_HORIZONTAL].toFloat()
   val ASSISTANT_USER_BUBBLE_PADDING_VERTICAL_DP: Float get() = constants[CONSTANT_ASSISTANT_USER_BUBBLE_PADDING_VERTICAL].toFloat()
 
@@ -238,10 +256,8 @@ internal object ShadowListUtilsCore {
   fun trim(text: String): String = nativeTrim(text)
   @JvmStatic private external fun nativeTrim(text: String): String
 
-  fun parseMarkdown(source: String): Array<ShadowListUtilsMarkdownBlock> = nativeParseMarkdown(source)
   fun isSafeUrl(url: String): Boolean = nativeIsSafeUrl(url)
 
-  @JvmStatic private external fun nativeParseMarkdown(source: String): Array<ShadowListUtilsMarkdownBlock>
   @JvmStatic private external fun nativeIsSafeUrl(url: String): Boolean
   @JvmStatic private external fun nativeBoardColumnLayout(boardWidth: Double, columnWidth: Double, sidePadding: Double, out: DoubleArray)
   @JvmStatic private external fun nativeBoardColumnHeight(heights: DoubleArray, minimum: Double, maximum: Double): Double

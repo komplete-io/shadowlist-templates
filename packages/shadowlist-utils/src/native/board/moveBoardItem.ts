@@ -21,7 +21,7 @@ function sameItems<ItemT>(
  * never shows in two columns or in none. Columns the move leaves alone keep their identity,
  * and the board itself comes back unchanged when nothing moved, when the destination column
  * is not on it, or when the key is no longer there and destinationIndex is below 0, which is
- * no drop spot. planBoardMove in the core's utils/BoardMovePlan.hpp is the same rule, and
+ * no drop spot. planBoardMove in shadowlist-utils-core/BoardMovePlan.hpp is the same rule, and
  * vectors.test holds them equal.
  */
 export function moveBoardItem<ItemT>(

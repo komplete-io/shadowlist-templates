@@ -1,5 +1,11 @@
-import { useMemo } from 'react';
-import { Appearance, Platform, StatusBar, StyleSheet } from 'react-native';
+import { useMemo, type ReactNode } from 'react';
+import {
+  Appearance,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { enableScreens } from 'react-native-screens';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,10 +25,12 @@ import { queryClient } from './queries/queryClient';
 import { network } from './api/network';
 import { launchSetting } from './launchSettings';
 import './jsFrameMonitor';
+import { RULER, rulerTarget } from './ruler/rulerCheck';
 import { useAppTheme } from './appTheme';
 import { HomeScreen } from './screens/HomeScreen';
 import { ContactDetailScreen } from './screens/ContactDetailScreen';
 import { EXAMPLES, type RootStackParamList } from './routes';
+import { BenchScreen } from './bench/BenchScreen';
 
 enableScreens();
 
@@ -42,9 +50,14 @@ if (launchTheme === 'light' || launchTheme === 'dark') {
   Appearance.setColorScheme(launchTheme);
 }
 
-const launchRoute = EXAMPLES.find(
-  (example) => example.route === launchSetting('SLRoute')
-)?.route;
+/*
+ * Bench is the list comparison screen. It only opens from SLRoute and isn't on Home.
+ */
+const launchRoute =
+  launchSetting('SLRoute') === 'Bench'
+    ? 'Bench'
+    : EXAMPLES.find((example) => example.route === launchSetting('SLRoute'))
+        ?.route;
 const INITIAL_STATE: InitialState | undefined = launchRoute
   ? { routes: [{ name: 'Home' }, { name: launchRoute }] }
   : undefined;
@@ -103,50 +116,72 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <ThemeProvider theme={theme}>
-        <StatusBar
-          barStyle={dark ? 'light-content' : 'dark-content'}
-          backgroundColor={theme.colors.background}
-        />
-        <QueryClientProvider client={queryClient}>
-          <SafeAreaProvider>
-            <NavigationContainer theme={navTheme} initialState={INITIAL_STATE}>
-              <Stack.Navigator screenOptions={screenOptions}>
-                <Stack.Screen
-                  name="Home"
-                  component={HomeScreen}
-                  options={{
-                    title: 'ShadowList',
-                    headerLargeTitle: true,
-                    headerStyle:
-                      Platform.OS === 'android'
-                        ? {
-                            backgroundColor: cssColor(
-                              theme.colors.groupedBackground
-                            ),
-                          }
-                        : undefined,
-                  }}
-                />
-                {EXAMPLES.map((example) => (
+      <RulerRoot>
+        <ThemeProvider theme={theme}>
+          <StatusBar
+            barStyle={dark ? 'light-content' : 'dark-content'}
+            backgroundColor={theme.colors.background}
+          />
+          <QueryClientProvider client={queryClient}>
+            <SafeAreaProvider>
+              <NavigationContainer
+                theme={navTheme}
+                initialState={INITIAL_STATE}
+              >
+                <Stack.Navigator screenOptions={screenOptions}>
                   <Stack.Screen
-                    key={example.route}
-                    name={example.route}
-                    component={example.component}
-                    options={{ ...exampleOptions, title: example.title }}
+                    name="Home"
+                    component={HomeScreen}
+                    options={{
+                      title: 'ShadowList',
+                      headerLargeTitle: true,
+                      headerStyle:
+                        Platform.OS === 'android'
+                          ? {
+                              backgroundColor: cssColor(
+                                theme.colors.groupedBackground
+                              ),
+                            }
+                          : undefined,
+                    }}
                   />
-                ))}
-                <Stack.Screen
-                  name="ContactDetail"
-                  component={ContactDetailScreen}
-                  options={{ title: '' }}
-                />
-              </Stack.Navigator>
-            </NavigationContainer>
-          </SafeAreaProvider>
-        </QueryClientProvider>
-      </ThemeProvider>
+                  {EXAMPLES.map((example) => (
+                    <Stack.Screen
+                      key={example.route}
+                      name={example.route}
+                      component={example.component}
+                      options={{ ...exampleOptions, title: example.title }}
+                    />
+                  ))}
+                  <Stack.Screen
+                    name="Bench"
+                    component={BenchScreen}
+                    options={{ ...exampleOptions, title: 'Bench' }}
+                  />
+                  <Stack.Screen
+                    name="ContactDetail"
+                    component={ContactDetailScreen}
+                    options={{ title: '' }}
+                  />
+                </Stack.Navigator>
+              </NavigationContainer>
+            </SafeAreaProvider>
+          </QueryClientProvider>
+        </ThemeProvider>
+      </RulerRoot>
     </GestureHandlerRootView>
+  );
+}
+
+/*
+ * With SLRuler 1, a view ShadowRuler measures from, see ruler/rulerCheck.ts. Nothing otherwise.
+ */
+function RulerRoot({ children }: { children: ReactNode }) {
+  if (!RULER) return <>{children}</>;
+  return (
+    <View ref={rulerTarget as never} style={styles.root} collapsable={false}>
+      {children}
+    </View>
   );
 }
 

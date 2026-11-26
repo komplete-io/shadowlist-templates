@@ -309,8 +309,10 @@ class FeedTest {
     assertEquals(layout.stripFrame, frame(strip))
     assertEquals(layout.stripImageFrames, stripImages(view).map(::frame))
     assertEquals(3 * step, stripContent(view).width)
-    assertEquals(4f.px, strip.paddingLeft)
-    assertEquals(4f.px, strip.paddingRight)
+    assertEquals(0, strip.paddingLeft)
+    assertEquals(0, strip.paddingRight)
+    // At rest the first image's leading edge is the text column's.
+    assertEquals(contentX, layout.stripFrame.left + layout.stripImageFrames[0].left - strip.scrollX)
     assertFalse(strip.clipToPadding)
     assertEquals(0, strip.scrollX)
   }

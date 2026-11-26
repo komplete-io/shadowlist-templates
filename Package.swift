@@ -7,7 +7,7 @@ import PackageDescription
  * ShadowListUtils is the templates library on ShadowListKit and builds for iOS only. Its C++
  * calls go through the Objective-C++ target ShadowListUtilsCore into ShadowListUtilsCpp, the
  * template logic in packages/shadowlist-utils-core. ShadowListUtilsCore also builds for macOS,
- * where the AppKit kit uses it without the Swift templates.
+ * where the AppKit example uses it without the Swift templates.
  * The template C++ includes itself as <shadowlist-utils-core/...>, which resolves from the
  * packages folder. It includes the engine core as <shadowlist-core/...> through the engine's
  * ShadowListCore product.
@@ -59,11 +59,48 @@ let package = Package(
   products: [
     .library(name: "ShadowListUtils", targets: ["ShadowListUtils"]),
     .library(name: "ShadowListUtilsCore", targets: ["ShadowListUtilsCore"]),
+    .library(name: "EnrichedMarkdown", targets: ["EnrichedMarkdown"]),
   ],
   dependencies: [
     engineDependency()
   ],
   targets: [
+    .target(
+      name: "EnrichedMarkdownCore",
+      path: "packages/enriched-markdown-core",
+      exclude: ["LICENSE", "PROVENANCE.md", "input", "highlight/code_highlight_podspec.rb"],
+      sources: ["enrmrkd", "parser", "repair", "highlight", "latex"],
+      publicHeadersPath: "parser",
+      cSettings: [.define("ENRMRKD_USE_UTF8", to: "1")],
+      cxxSettings: [
+        .headerSearchPath("enrmrkd"), .headerSearchPath("parser"),
+        .headerSearchPath("repair"), .headerSearchPath("latex"),
+      ]
+    ),
+    .target(
+      name: "EnrichedMarkdownCppShim",
+      dependencies: ["EnrichedMarkdownCore"],
+      path: "packages/enriched-markdown-uikit/cpp",
+      publicHeadersPath: ".",
+      cxxSettings: [
+        .headerSearchPath("../../enriched-markdown-core/enrmrkd"),
+        .headerSearchPath("../../enriched-markdown-core/parser"),
+        .headerSearchPath("../../enriched-markdown-core/highlight"),
+        .headerSearchPath("../../enriched-markdown-core/latex"),
+        .define("ENRMRKD_USE_UTF8", to: "1"),
+      ]
+    ),
+    // EnrichedMarkdown is UIKit code and builds for iOS only. SwiftPM has no per-target platform
+    // exclusion, so the iOS conditions on the dependency edges keep it out of macOS builds of
+    // ShadowListUtilsCore. Building this target for macOS directly fails.
+    // See packages/enriched-markdown-uikit/PROVENANCE.md.
+    .target(
+      name: "EnrichedMarkdown",
+      dependencies: [
+        .target(name: "EnrichedMarkdownCppShim", condition: .when(platforms: [.iOS]))
+      ],
+      path: "packages/enriched-markdown-uikit/Sources/EnrichedMarkdown"
+    ),
     .target(
       name: "ShadowListUtilsCpp",
       dependencies: [
@@ -93,6 +130,7 @@ let package = Package(
       dependencies: [
         .product(name: "ShadowListKit", package: "shadowlist"),
         "ShadowListUtilsCore",
+        .target(name: "EnrichedMarkdown", condition: .when(platforms: [.iOS])),
       ],
       path: "packages/shadowlist-uikit-utils/Sources/ShadowListUtils"
     ),

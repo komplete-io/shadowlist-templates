@@ -70,13 +70,6 @@ TEST(appending_a_surrogate_writes_the_replacement) {
   CHECK_EQ(text, std::string("\xEF\xBF\xBD\xEF\xBF\xBD"));
 }
 
-TEST(utf16_length_counts_an_astral_code_point_twice) {
-  CHECK_EQ(lengthUtf16(""), std::size_t(0));
-  CHECK_EQ(lengthUtf16("abc"), std::size_t(3));
-  CHECK_EQ(lengthUtf16("\xC3\xA9\xE6\x97\xA5"), std::size_t(2));
-  CHECK_EQ(lengthUtf16("a\xF0\x9F\x98\x80"), std::size_t(3));
-}
-
 TEST(white_space_is_the_set_js_matches) {
   for (char32_t codePoint : {char32_t(0x09), char32_t(0x0A), char32_t(0x0B), char32_t(0x0C), char32_t(0x0D),
          char32_t(0x20), char32_t(0xA0), char32_t(0x1680), char32_t(0x2000), char32_t(0x200A), char32_t(0x2028),

@@ -24,15 +24,21 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
   public var onOpenLink: ((String) -> Void)?
   public var labels = ShadowListUtilsAssistantLabels() { didSet { changedLayout() } }
   public let theme: ShadowListUtilsTheme
-  var thinkingExpanded = false
-  var expandedToolKeys: Set<String> = []
+  var thinkingExpanded = false { didSet { if thinkingExpanded != oldValue { changedLayout() } } }
+  var expandedToolKeys: Set<String> = [] { didSet { if expandedToolKeys != oldValue { changedLayout() } } }
   var onLayoutChange: (() -> Void)?
   private let header = ShadowListKitTextView(frame: .zero)
   private var markdownViews: [String: ShadowListUtilsAssistantMarkdown] = [:]
   private var sectionViews: [UIView] = []
   private var actionViews: [UIView] = []
-  private var copied = false
+  private var copied = false { didSet { if copied != oldValue { needsApply() } } }
   private var resetCopied: DispatchWorkItem?
+  /*
+   * The layout of the present values at one width, and whether the views show it. A list hands
+   * its prepared layout to apply, and the layout pass that follows then has nothing to do.
+   */
+  private var currentLayout: Layout?
+  private var layoutApplied = false
 
   public init(message: ShadowListUtilsAssistantReply, turn: ShadowListUtilsAssistantTurn? = nil, theme: ShadowListUtilsTheme = .system) {
     self.message = message
@@ -54,7 +60,7 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
 
   enum Section {
     case typing(frame: CGRect)
-    case text(key: String, layout: ShadowListKitTextLayout, frame: CGRect, error: Bool)
+    case text(notice: String, layout: ShadowListKitTextLayout, frame: CGRect, error: Bool)
     case thinking(title: String, text: String, body: ShadowListUtilsAssistantDisclosureTextLayout, frame: CGRect, expanded: Bool)
     case tool(call: ShadowListUtilsAssistantToolCall, title: String, text: String, body: ShadowListUtilsAssistantDisclosureTextLayout, frame: CGRect, expanded: Bool)
     case markdown(key: String, text: String, streaming: Bool, frame: CGRect)
@@ -110,14 +116,9 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
     let steps = ShadowListUtilsCore.stepsOf(turn.content, positions: turn.toolCalls.map { NSNumber(value: $0.at ?? 0) })
     for (index, step) in steps.enumerated() {
       if let text = step as? ShadowListUtilsAssistantTextStep {
-        let blocks = ShadowListUtilsCore.parseMarkdown(text.text)
         let isStreaming = streaming && index == steps.count - 1
-        var height: CGFloat = 0
-        for block in blocks {
-          height += ShadowListUtilsAssistantMarkdownBlock.layout(block: block, width: inner, theme: theme).height + spacing.md
-        }
-        if isStreaming { height += 6 + spacing.md }
-        height = max(0, height - spacing.md)
+        var height = ShadowListUtilsAssistantMarkdown.height(text: text.text, streaming: isStreaming, width: inner, theme: theme)
+        if isStreaming { height += (height > 0 ? spacing.md : 0) + 6 }
         sections.append(.markdown(key: "text-\(text.at)", text: text.text, streaming: isStreaming,
           frame: direction.place(CGRect(x: x, y: y, width: inner, height: height))))
         y += height + spacing.md
@@ -141,11 +142,12 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
     switch turn.status {
     case .stopped:
       let text = theme.typography.footnote.layout(labels.responseStopped, width: inner)
-      sections.append(.text(key: "stopped", layout: text, frame: direction.place(CGRect(CGPoint(x: x, y: y), text)), error: false))
+      sections.append(.text(notice: labels.responseStopped, layout: text, frame: direction.place(CGRect(CGPoint(x: x, y: y), text)), error: false))
       y += text.size.height + spacing.md
     case let .failed(error):
-      let text = theme.typography.footnote.layout(error.flatMap { $0.isEmpty ? nil : $0 } ?? labels.responseFailed, width: inner)
-      sections.append(.text(key: "failed", layout: text, frame: direction.place(CGRect(CGPoint(x: x, y: y), text)), error: true))
+      let notice = error.flatMap { $0.isEmpty ? nil : $0 } ?? labels.responseFailed
+      let text = theme.typography.footnote.layout(notice, width: inner)
+      sections.append(.text(notice: notice, layout: text, frame: direction.place(CGRect(CGPoint(x: x, y: y), text)), error: true))
       y += text.size.height + spacing.sm
       if hasRetry { sections.append(.retry(frame: direction.place(CGRect(x: x, y: y, width: inner, height: 32)))); y += 32 + spacing.md }
     case let .done(sources, _):
@@ -184,15 +186,34 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
   }
 
   public override func sizeThatFits(_ size: CGSize) -> CGSize { makeLayout(width: size.width).size }
-  public override func layoutSubviews() { super.layoutSubviews(); apply(makeLayout(width: bounds.width)) }
+  public override func layoutSubviews() {
+    super.layoutSubviews()
+    let layout = makeLayout(width: bounds.width)
+    if !layoutApplied { apply(layout) }
+  }
+
+  public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    if previousTraitCollection?.preferredContentSizeCategory != traitCollection.preferredContentSizeCategory {
+      ShadowListUtilsPlatform.resolve(category: traitCollection.preferredContentSizeCategory, window: window)
+      changedLayout()
+    }
+  }
 
   private func makeLayout(width: CGFloat) -> Layout {
-    Self.layout(message: message, live: turn, width: width, busy: busy, isLatest: isLatest,
+    if let currentLayout, currentLayout.size.width == width { return currentLayout }
+    let layout = Self.layout(message: message, live: turn, width: width, busy: busy, isLatest: isLatest,
       thinkingExpanded: thinkingExpanded, expandedToolKeys: expandedToolKeys, hasFeedback: onFeedback != nil,
       hasRetry: onRetry != nil, theme: theme, labels: labels)
+    currentLayout = layout
+    layoutApplied = false
+    return layout
   }
 
   func apply(_ layout: Layout) {
+    // Set first: a change a view reports while it is applied must still invalidate the layout.
+    currentLayout = layout
+    layoutApplied = true
     header.show(layout.header, theme.colors.secondaryLabel)
     header.frame = layout.headerFrame
     header.accessibilityLabel = [labels.assistantName, message.model].compactMap { $0 }.joined(separator: ", ")
@@ -207,31 +228,34 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
         addSection(view)
       case let .markdown(key, text, streaming, frame):
         let view = markdownViews[key] ?? ShadowListUtilsAssistantMarkdown(theme: theme)
-        view.text = text
-        view.streaming = streaming
+        view.update(text: text, streaming: streaming)
+        view.labels = labels
+        view.onLayoutChange = { [weak self] in
+          self?.changedLayout()
+          self?.onLayoutChange?()
+        }
         view.onCopyCode = { [weak self] in self?.onCopyCode?($0) }
-        view.onOpenLink = onOpenLink
+        view.onOpenLink = { [weak self] in self?.open($0) }
         markdownViews[key] = view
         usedMarkdown.insert(key)
         if view.superview == nil { addSubview(view) }
         view.frame = frame
-      case let .text(key, text, frame, error):
+      case let .text(notice, text, frame, error):
         let view = ShadowListKitTextView(frame: frame)
         view.show(text, error ? theme.colors.red : theme.colors.secondaryLabel)
         view.isAccessibilityElement = true
-        // The parser owns text; notices use their localized value from this layout's row.
-        view.accessibilityLabel = key == "typing" ? labels.typing : error ? (resolvedTurn.status.errorText ?? labels.responseFailed) : labels.responseStopped
+        view.accessibilityLabel = notice
         addSection(view)
       case let .thinking(title, text, body, frame, expanded):
         let view = disclosure(title: title, text: text, body: body, frame: frame, expanded: expanded) { [weak self] in
-          guard let self else { return }; self.thinkingExpanded.toggle(); self.changedLayout(); self.onLayoutChange?()
+          guard let self else { return }; self.thinkingExpanded.toggle(); self.onLayoutChange?()
         }
         addSection(view)
       case let .tool(call, title, text, body, frame, expanded):
         let view = disclosure(title: title, text: text, body: body, frame: frame, expanded: expanded) { [weak self] in
           guard let self else { return }
           if self.expandedToolKeys.contains(call.key) { self.expandedToolKeys.remove(call.key) } else { self.expandedToolKeys.insert(call.key) }
-          self.changedLayout(); self.onLayoutChange?()
+          self.onLayoutChange?()
         }
         (view as? ShadowListUtilsAssistantDisclosure)?.status = call.status
         view.backgroundColor = theme.colors.elevated
@@ -316,10 +340,9 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
       onCopy?(current.content)
       copied = true
       resetCopied?.cancel()
-      let reset = DispatchWorkItem { [weak self] in self?.copied = false; self?.setNeedsLayout() }
+      let reset = DispatchWorkItem { [weak self] in self?.copied = false }
       resetCopied = reset
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: reset)
-      setNeedsLayout()
     case .share: onShare?(current.content)
     case .regenerate: if !busy { onRegenerate?(message.key) }
     case .good: onFeedback?(message.key, message.feedback == .good ? nil : .good)
@@ -330,21 +353,20 @@ public final class ShadowListUtilsAssistantReplyMessage: UIView {
     }
   }
 
-  private func open(_ href: String) {
-    if let onOpenLink { onOpenLink(href) }
-    else if ShadowListUtilsCore.isSafeUrl(href), let url = URL(string: ShadowListUtilsCore.trim(href)) { UIApplication.shared.open(url) }
-  }
+  private func open(_ href: String) { ShadowListUtilsAssistantMarkdown.open(href, handler: onOpenLink) }
   private func invalidateMessage(previousKey: String) {
-    if previousKey != message.key { thinkingExpanded = false; expandedToolKeys = []; copied = false; resetCopied?.cancel() }
+    if previousKey != message.key {
+      thinkingExpanded = false; expandedToolKeys = []; copied = false; resetCopied?.cancel()
+      // Another reply starts from fresh documents: no selection, scroll offset or revealed spoiler carries over.
+      markdownViews.values.forEach { $0.removeFromSuperview() }
+      markdownViews.removeAll()
+    }
     changedLayout()
   }
-  private func changedLayout() { setNeedsLayout(); invalidateIntrinsicContentSize() }
+  private func changedLayout() { currentLayout = nil; layoutApplied = false; setNeedsLayout(); invalidateIntrinsicContentSize() }
+  private func needsApply() { layoutApplied = false; setNeedsLayout() }
   public override func didMoveToWindow() {
     super.didMoveToWindow()
     if window == nil { resetCopied?.cancel(); copied = false }
   }
-}
-
-private extension ShadowListUtilsAssistantTurnStatus {
-  var errorText: String? { if case let .failed(error) = self { return error }; return nil }
 }

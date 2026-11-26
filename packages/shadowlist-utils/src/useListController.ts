@@ -5,6 +5,7 @@ import { useReducer, useRef, useCallback, useMemo, useEffect } from 'react';
 const timers = globalThis as unknown as {
   setTimeout: (handler: () => void, timeout: number) => number;
   clearTimeout: (handle: number) => void;
+  requestAnimationFrame: (callback: () => void) => number;
 };
 
 /*
@@ -149,6 +150,10 @@ export interface ListController<
   handleEndReached: () => void;
   handleStartReached: () => void;
   handleScroll: (event: ScrollEventT) => void;
+  handleScrollBeginDrag: () => void;
+  handleScrollEndDrag: () => void;
+  handleMomentumScrollBegin: () => void;
+  handleMomentumScrollEnd: () => void;
   handleViewableItemsChanged: (info: ViewableInfoT) => void;
 
   setItems: (update: ItemT[] | ((previous: ItemT[]) => ItemT[])) => void;
@@ -262,37 +267,105 @@ export function useListController<
   }, [run]);
 
   /*
-   * Ends scrolling once no event came for scrollIdleMs. One timer per scroll: when it fires
+   * Scrolling ends on the list's own signals once they are wired: momentumScrollEnd, which
+   * the list also sends when a scroll command lands, or a drag that ended without momentum
+   * starting by the next frame. A screen that only passes handleScroll gets the fallback:
+   * scrolling ends once no event came for scrollIdleMs. One timer per scroll: when it fires
    * early because events kept coming, it waits out the rest.
    */
-  const armScrollIdle = useCallback((delay: number) => {
-    scrollIdleTimer.current = timers.setTimeout(() => {
+  const lifecycleRef = useRef(false);
+  const draggingRef = useRef(false);
+  const momentumRef = useRef(false);
+
+  const endScrolling = useCallback(() => {
+    if (scrollIdleTimer.current !== null) {
+      timers.clearTimeout(scrollIdleTimer.current);
       scrollIdleTimer.current = null;
-      const idleMs = optionsRef.current.scrollIdleMs ?? 150;
-      const remaining = lastScrollAtRef.current + idleMs - Date.now();
-      if (remaining > 0) {
-        armScrollIdle(remaining);
-        return;
-      }
-      scrollingRef.current = false;
-      dispatch({ type: 'scrollEnded' });
-    }, delay);
+    }
+    if (!scrollingRef.current) return;
+    scrollingRef.current = false;
+    dispatch({ type: 'scrollEnded' });
   }, []);
+
+  const startScrolling = useCallback(() => {
+    if (scrollingRef.current) return;
+    scrollingRef.current = true;
+    dispatch({ type: 'scrollStarted' });
+  }, []);
+
+  const armScrollIdle = useCallback(
+    (delay: number) => {
+      scrollIdleTimer.current = timers.setTimeout(() => {
+        scrollIdleTimer.current = null;
+        if (lifecycleRef.current) return;
+        const idleMs = optionsRef.current.scrollIdleMs ?? 150;
+        const remaining = lastScrollAtRef.current + idleMs - Date.now();
+        if (remaining > 0) {
+          armScrollIdle(remaining);
+          return;
+        }
+        endScrolling();
+      }, delay);
+    },
+    [endScrolling]
+  );
 
   const handleScroll = useCallback(
     (event: ScrollEventT) => {
-      lastScrollAtRef.current = Date.now();
-      if (!scrollingRef.current) {
-        scrollingRef.current = true;
-        dispatch({ type: 'scrollStarted' });
-      }
+      startScrolling();
       optionsRef.current.onScroll?.(event);
+      if (lifecycleRef.current) return;
+      lastScrollAtRef.current = Date.now();
       if (scrollIdleTimer.current === null) {
         armScrollIdle(optionsRef.current.scrollIdleMs ?? 150);
       }
     },
-    [armScrollIdle]
+    [armScrollIdle, startScrolling]
   );
+
+  useEffect(
+    () => () => {
+      if (scrollIdleTimer.current !== null) {
+        timers.clearTimeout(scrollIdleTimer.current);
+      }
+    },
+    []
+  );
+
+  const adoptLifecycle = useCallback(() => {
+    lifecycleRef.current = true;
+    if (scrollIdleTimer.current !== null) {
+      timers.clearTimeout(scrollIdleTimer.current);
+      scrollIdleTimer.current = null;
+    }
+  }, []);
+
+  const handleScrollBeginDrag = useCallback(() => {
+    adoptLifecycle();
+    draggingRef.current = true;
+    startScrolling();
+  }, [adoptLifecycle, startScrolling]);
+
+  const handleScrollEndDrag = useCallback(() => {
+    adoptLifecycle();
+    draggingRef.current = false;
+    // Momentum, if any, begins within the frame the finger lifted in.
+    timers.requestAnimationFrame(() => {
+      if (!draggingRef.current && !momentumRef.current) endScrolling();
+    });
+  }, [adoptLifecycle, endScrolling]);
+
+  const handleMomentumScrollBegin = useCallback(() => {
+    adoptLifecycle();
+    momentumRef.current = true;
+    startScrolling();
+  }, [adoptLifecycle, startScrolling]);
+
+  const handleMomentumScrollEnd = useCallback(() => {
+    adoptLifecycle();
+    momentumRef.current = false;
+    if (!draggingRef.current) endScrolling();
+  }, [adoptLifecycle, endScrolling]);
 
   const handleViewableItemsChanged = useCallback((info: ViewableInfoT) => {
     optionsRef.current.onViewableItemsChanged?.(info);
@@ -395,6 +468,10 @@ export function useListController<
     handleEndReached,
     handleStartReached,
     handleScroll,
+    handleScrollBeginDrag,
+    handleScrollEndDrag,
+    handleMomentumScrollBegin,
+    handleMomentumScrollEnd,
     handleViewableItemsChanged,
     setItems,
     prependItems,

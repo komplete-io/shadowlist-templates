@@ -115,7 +115,9 @@ public struct ShadowListUtilsChatBubble: ShadowListUtilsRow {
         innerWidth = max(innerWidth, line.size.width)
         innerHeight += spacing.xs + captionLine
       }
-      let bubbleWidth = innerWidth + 2 * bubblePadding
+      // Whole device pixels wide, never past the widest bubble, which keeps an own bubble's
+      // trailing edge on the column's edge.
+      let bubbleWidth = ShadowListUtilsPlatform.floorToPixel(innerWidth + 2 * bubblePadding)
       let bubbleX = ShadowListUtilsPlatform.roundToPixel(own ? trailing - bubbleWidth : leading)
       result.bubbleFrame = CGRect(x: bubbleX, y: y, width: bubbleWidth, height: innerHeight + 2 * spacing.sm)
       result.text = body

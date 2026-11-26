@@ -7,9 +7,16 @@ import type {
 } from './types';
 
 /*
- * About 20 renders a second, the usual default in chat kits.
+ * About 20 renders a second at most, the usual default in chat kits.
  */
 const DEFAULT_FLUSH_MS = 50;
+
+/* The tsconfig has no DOM lib and frame globals have no types. Read them off globalThis
+ * without destructuring to keep the calls bound to the global. */
+const frames = globalThis as unknown as {
+  requestAnimationFrame: (callback: (now: number) => void) => number;
+  cancelAnimationFrame: (handle: number) => void;
+};
 
 export interface CreateTurnWriterOptions {
   store: AssistantStreamStore;
@@ -36,9 +43,11 @@ export interface AssistantTurnWriter {
 }
 
 /*
- * Feeds one streaming turn into the store. Tokens update a private draft, and a timer
- * publishes it only when something changed. Renders stay capped however fast tokens
- * come. Calls after the turn ends are ignored, since a token can race a stop.
+ * Feeds one streaming turn into the store. Tokens update a private draft, and a change asks
+ * for a frame that publishes it: at most once a frame and once per flushMs by the frame's
+ * time. A busy JS thread delays the frame, so publishing backs off with the renders it causes,
+ * and nothing runs between tokens. Calls after the turn ends are ignored, since a token can
+ * race a stop.
  */
 export function createTurnWriter({
   store,
@@ -52,18 +61,28 @@ export function createTurnWriter({
   let thinkingMs: number | undefined;
   // Replaced, never mutated. Untouched calls keep their identity.
   let toolCalls: readonly AssistantToolCall[] = [];
-  let dirty = false;
   let finished = false;
+  let frame: number | null = null;
+  let lastFlushAt = -Infinity;
 
   store.set(messageId, { status: 'streaming', content });
 
   const snapshot = () => ({ content, thinking, thinkingMs, toolCalls });
 
-  const flushTimer = setInterval(() => {
-    if (!dirty) return;
-    dirty = false;
+  const flush = (now: number) => {
+    frame = null;
+    if (finished) return;
+    if (now - lastFlushAt < flushMs) {
+      frame = frames.requestAnimationFrame(flush);
+      return;
+    }
+    lastFlushAt = now;
     store.set(messageId, { status: 'streaming', ...snapshot() });
-  }, flushMs);
+  };
+
+  const markDirty = () => {
+    if (frame === null) frame = frames.requestAnimationFrame(flush);
+  };
 
   /*
    * Thinking ends at the first event that isn't thinking.
@@ -99,7 +118,10 @@ export function createTurnWriter({
 
   const finish = (turn: AssistantTurn) => {
     finished = true;
-    clearInterval(flushTimer);
+    if (frame !== null) {
+      frames.cancelAnimationFrame(frame);
+      frame = null;
+    }
     store.set(messageId, turn);
     onFinish?.(turn);
   };
@@ -129,12 +151,12 @@ export function createTurnWriter({
           ? { ...call, at: content.length }
           : call
       );
-      dirty = true;
+      markDirty();
     },
     appendThinking: (text) => {
       if (finished) return;
       thinking += text;
-      dirty = true;
+      markDirty();
     },
     appendContent: (text) => {
       if (finished) return;
@@ -147,7 +169,7 @@ export function createTurnWriter({
         text = text.replace(/^\s+/, '');
       }
       content += text;
-      dirty = true;
+      markDirty();
     },
     startToolCall: ({ id = generateId(), name, input }) => {
       if (finished) return id;
@@ -157,14 +179,14 @@ export function createTurnWriter({
         ...toolCalls,
         { id, name, input, at: content.length, status: 'running' },
       ];
-      dirty = true;
+      markDirty();
       return id;
     },
     completeToolCall: (id, output) => {
       if (finished) return;
       endThinking();
       updateToolCall(id, (call) => ({ ...base(call), status: 'done', output }));
-      dirty = true;
+      markDirty();
     },
     failToolCall: (id, output) => {
       if (finished) return;
@@ -174,7 +196,7 @@ export function createTurnWriter({
         status: 'failed',
         output,
       }));
-      dirty = true;
+      markDirty();
     },
     complete: (result) => {
       if (finished) return;

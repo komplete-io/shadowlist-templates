@@ -3,4 +3,10 @@ plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'shadowlist.example'
 include ':app'
+// Layout checks only: SHADOWRULER=1 adds the ShadowRuler SDK the RN module links, see react-native.config.js.
+if (System.getenv('SHADOWRULER') == '1') {
+  def rulerRoot = System.getenv('SHADOWRULER_ROOT') ?: new File(rootDir, '../../../../shadowruler').canonicalPath
+  include ':shadowruler-android'
+  project(':shadowruler-android').projectDir = new File(rulerRoot, 'android')
+}
 includeBuild('../node_modules/@react-native/gradle-plugin')

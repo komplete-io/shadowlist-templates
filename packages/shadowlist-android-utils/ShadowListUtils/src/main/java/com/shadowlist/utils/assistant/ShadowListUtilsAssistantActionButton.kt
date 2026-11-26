@@ -45,7 +45,7 @@ class ShadowListUtilsAssistantActionButton(
     text = if (showLabel) label else ""
     theme.typography.footnote.with(ShadowListUtilsFontWeight.SEMIBOLD).applyTo(this, theme.colors.label)
     setPadding(if (showLabel) 10f.px else 0, 0, if (showLabel) 10f.px else 0, 0)
-    background = GradientDrawable().apply { setColor(if (showLabel) theme.colors.elevated else 0); cornerRadius = theme.radius.sm.pxf }
+    background = GradientDrawable().apply { setColor(if (showLabel) theme.colors.elevated else 0); cornerRadius = theme.radius.lg.pxf }
     val drawable = icon?.constantState?.newDrawable()?.mutate() ?: icon
     drawable?.setBounds(0, 0, 18f.px, 18f.px)
     foreground = if (showLabel) null else drawable

@@ -2,6 +2,9 @@
 # and passes it on relative to this folder.
 # The kit and the core come from that engine checkout, the templates from this repository.
 name: ShadowListKitExample
+include:
+  - path: ruler.yml
+    enable: ${SHADOWRULER_ENABLED}
 options:
   bundleIdPrefix: shadowlist
   deploymentTarget:
@@ -54,6 +57,60 @@ targets:
           ]
         CLANG_ENABLE_OBJC_ARC: YES
         GENERATE_INFOPLIST_FILE: YES
+  EnrichedMarkdownCppShim:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: ../../packages/enriched-markdown-uikit/cpp
+        includes: ['*.h']
+        headerVisibility: public
+      - path: ../../packages/enriched-markdown-uikit/cpp
+        includes: ['*.cpp']
+      - path: ../../packages/enriched-markdown-core
+        includes:
+          [
+            'enrmrkd/*.c',
+            'enrmrkd/*.h',
+            'parser/*.cpp',
+            'parser/*.hpp',
+            'repair/*.cpp',
+            'repair/*.hpp',
+            'highlight/*.cpp',
+            'highlight/*.hpp',
+            'latex/*.cpp',
+            'latex/*.hpp',
+          ]
+        headerVisibility: project
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: shadowlist.enrichedmarkdown.shim
+        DEFINES_MODULE: YES
+        # The shim has no umbrella header, so Xcode cannot write its module map itself.
+        MODULEMAP_FILE: '$(SRCROOT)/EnrichedMarkdownCppShim.modulemap'
+        GCC_PREPROCESSOR_DEFINITIONS: ['$(inherited)', 'ENRMRKD_USE_UTF8=1']
+        HEADER_SEARCH_PATHS:
+          [
+            '$(SRCROOT)/../../packages/enriched-markdown-core/enrmrkd',
+            '$(SRCROOT)/../../packages/enriched-markdown-core/parser',
+            '$(SRCROOT)/../../packages/enriched-markdown-core/repair',
+            '$(SRCROOT)/../../packages/enriched-markdown-core/highlight',
+            '$(SRCROOT)/../../packages/enriched-markdown-core/latex',
+          ]
+        GENERATE_INFOPLIST_FILE: YES
+  EnrichedMarkdown:
+    type: framework.static
+    platform: iOS
+    sources:
+      - path: ../../packages/enriched-markdown-uikit/Sources/EnrichedMarkdown
+    dependencies:
+      - target: EnrichedMarkdownCppShim
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: shadowlist.enrichedmarkdown
+        DEFINES_MODULE: YES
+        SWIFT_VERSION: '5.9'
+        OTHER_SWIFT_FLAGS: ['$(inherited)', '-package-name', 'EnrichedMarkdown']
+        GENERATE_INFOPLIST_FILE: YES
   ShadowListUtils:
     type: framework.static
     platform: iOS
@@ -62,6 +119,7 @@ targets:
     dependencies:
       - target: ShadowListKit
       - target: ShadowListUtilsCore
+      - target: EnrichedMarkdown
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: shadowlist.utils
@@ -78,6 +136,8 @@ targets:
       - target: ShadowListKit
       - target: ShadowListUtilsCore
       - target: ShadowListUtils
+      - target: EnrichedMarkdownCppShim
+      - target: EnrichedMarkdown
     info:
       path: Sources/Info.plist
       properties:

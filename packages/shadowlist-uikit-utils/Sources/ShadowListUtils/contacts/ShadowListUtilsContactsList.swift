@@ -91,7 +91,7 @@ extension ShadowListKitSwipeActionsConfiguration {
    * One destructive action in the theme's red that hands the contact to onDelete.
    */
   static func deleting(
-    _ item: ShadowListUtilsContactItem, title: String, color: ShadowListUtilsColor,
+    _ item: ShadowListUtilsContactItem, title: String, color: UIColor,
     onDelete: @escaping (ShadowListUtilsContactItem) -> Void
   ) -> ShadowListKitSwipeActionsConfiguration {
     let action = ShadowListKitSwipeAction(style: .destructive, title: title) { _, completion in

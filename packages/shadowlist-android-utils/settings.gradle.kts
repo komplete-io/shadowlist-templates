@@ -44,4 +44,15 @@ includeBuild(shadowlistRoot.resolve("packages/shadowlist-android")) {
   }
 }
 
+// Keep Maven coordinates in publications while building the vendored native renderer locally.
+includeBuild("../enriched-markdown-android") {
+  dependencySubstitution {
+    val markdownGroup = if (System.getenv("JITPACK") == "true") {
+      "${System.getenv("GROUP") ?: "com.github.komplete-io"}.${System.getenv("ARTIFACT") ?: "shadowlist-templates"}"
+    } else "io.github.azimgd"
+    substitute(module("$markdownGroup:enriched-markdown-ui")).using(project(":ui"))
+    substitute(module("$markdownGroup:enriched-markdown-parser")).using(project(":parser"))
+  }
+}
+
 include(":ShadowListUtils")

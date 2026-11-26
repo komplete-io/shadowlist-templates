@@ -373,7 +373,7 @@ const useStyles = createStyles((theme) =>
     },
     field: {
       backgroundColor: theme.colors.elevated,
-      borderRadius: theme.radius.xl,
+      borderRadius: theme.radius.lg + theme.spacing.xs,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.colors.separator,
       paddingTop: theme.spacing.sm,
@@ -403,8 +403,8 @@ const useStyles = createStyles((theme) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: theme.spacing.xs,
-      paddingHorizontal: theme.spacing.xs + 2,
-      paddingBottom: theme.spacing.xs + 2,
+      paddingHorizontal: theme.spacing.xs,
+      paddingBottom: theme.spacing.xs,
     },
     pill: {
       flexDirection: 'row',
@@ -412,7 +412,7 @@ const useStyles = createStyles((theme) =>
       gap: theme.spacing.xs,
       height: 30,
       paddingHorizontal: theme.spacing.md,
-      borderRadius: theme.radius.pill,
+      borderRadius: theme.radius.lg,
       backgroundColor: theme.colors.fill,
     },
     pillActive: {

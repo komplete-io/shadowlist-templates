@@ -1,0 +1,5 @@
+framework module EnrichedMarkdownCppShim {
+  header "SwiftParserCAPI.h"
+  header "SwiftStreamingCAPI.h"
+  export *
+}

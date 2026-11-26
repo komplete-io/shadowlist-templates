@@ -16,6 +16,7 @@ class ShadowListUtilsAssistantList : ShadowListUtilsList {
   private var thinkingExpandedKeys = emptySet<String>()
   private var expandedToolKeys = emptyMap<String, Set<String>>()
   private var endKeys = emptySet<String>()
+  private var markdownRevisions = emptyMap<String, Int>()
 
   var items: List<ShadowListUtilsAssistantMessage>
     get() = storedItems
@@ -23,6 +24,7 @@ class ShadowListUtilsAssistantList : ShadowListUtilsList {
   fun setItems(items: List<ShadowListUtilsAssistantMessage>, animated: Boolean) {
     storedItems = items.map { it.snapshot() }
     val keys = items.map { it.key }.toSet()
+    markdownRevisions = markdownRevisions.filterKeys { it in keys }
     actionsVisibleKeys = actionsVisibleKeys.intersect(keys)
     thinkingExpandedKeys = thinkingExpandedKeys.intersect(keys)
     expandedToolKeys = expandedToolKeys.filterKeys { it in keys }
@@ -76,6 +78,12 @@ class ShadowListUtilsAssistantList : ShadowListUtilsList {
         thinkingExpandedKeys = if (expanded) thinkingExpandedKeys + key else thinkingExpandedKeys - key
         expandedToolKeys = expandedToolKeys + (key to toolKeys.toSet())
         rebuildRows()
+      }, markdownRevision = markdownRevisions[item.key] ?: 0, onMarkdownHeightChange = { key ->
+        if (storedItems.any { it.key == key }) {
+          layoutCache.invalidate(key)
+          markdownRevisions = markdownRevisions + (key to ((markdownRevisions[key] ?: 0) + 1))
+          rebuildRows()
+        }
       }) }
   }
 

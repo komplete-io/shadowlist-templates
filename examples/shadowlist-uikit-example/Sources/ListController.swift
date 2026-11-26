@@ -10,6 +10,12 @@ enum RowChange {
   case reset
   case prepend(Int)
   case append(Int)
+  /*
+   * Rows inserted at these indices of the new rows, or deleted at these indices of the rows
+   * before. The visible rows stay where they are.
+   */
+  case insert(IndexSet)
+  case delete(IndexSet)
   case update
 }
 
@@ -58,6 +64,8 @@ final class ListController: NSObject {
       backend = ShadowListBackend(controller: self, inverted: inverted)
     } else if columns > 1 {
       backend = CollectionBackend(controller: self)
+    } else if engine.isCompositional, !inverted {
+      backend = CompositionalBackend(controller: self)
     } else {
       backend = TableBackend(controller: self, inverted: inverted)
     }
@@ -93,6 +101,15 @@ final class ListController: NSObject {
     didSet { backend.snapToItem = snapToItem }
   }
 
+  /*
+   * The height of every row, for a screen whose rows all have one. The table takes it as its
+   * rowHeight and the compositional layout as an absolute height, their fastest setups. Set it
+   * before the first rows.
+   */
+  var fixedRowHeight: CGFloat? {
+    didSet { backend.fixedRowHeightChanged() }
+  }
+
   func moveRow(from: Int, to: Int) {
     let row = hostedRows.remove(at: from)
     hostedRows.insert(row, at: to)
@@ -116,7 +133,7 @@ final class ListController: NSObject {
   func setRows(_ rows: [ShadowListUtilsRow], change: RowChange) {
     hostedRows = rows
     if !engine.selfSizing, !prefetchPaused {
-      cache.prefetch(rows, width: rowWidth, around: 0)
+      cache.prefetch(rows, width: rowWidth, around: 0, extent: prefetchExtent)
     }
     update { backend.rowsChanged(change) }
   }
@@ -138,6 +155,29 @@ final class ListController: NSObject {
     backend.scrollToEnd(animated: animated)
   }
 
+  private var prefetchOffset = -CGFloat.greatestFiniteMagnitude
+
+  /*
+   * How far the hosted engines lay rows out ahead, the template list's eight viewports.
+   */
+  var prefetchExtent: CGFloat {
+    view.bounds.height > 0 ? view.bounds.height * 8 : .infinity
+  }
+
+  /*
+   * Layouts made ahead while the hosted engines scroll, by the policy the template list follows:
+   * around the first visible row, each time the offset moved half a viewport. UIKit's own
+   * prefetching API does not run while ShadowListKitBench moves the offset. Without this a table
+   * or a collection would lay rows out on the main thread in the comparison.
+   */
+  func scrolled(firstVisible: () -> Int?) {
+    guard !engine.selfSizing, !prefetchPaused, abs(view.contentOffset.y - prefetchOffset) > view.bounds.height / 2,
+      let index = firstVisible()
+    else { return }
+    prefetchOffset = view.contentOffset.y
+    cache.prefetch(rows, width: rowWidth, around: index, extent: prefetchExtent)
+  }
+
   /*
    * The layout a cell shows, or nil when the engine sizes rows from their views.
    */
@@ -156,6 +196,11 @@ protocol ListBackend: AnyObject {
   func stickyIndicesChanged()
   func scrollToItem(at index: Int, animated: Bool)
   func scrollToEnd(animated: Bool)
+  func fixedRowHeightChanged()
+}
+
+extension ListBackend {
+  func fixedRowHeightChanged() {}
 }
 
 // MARK: - ShadowListUtils template
@@ -265,6 +310,10 @@ final class ShadowListBackend: NSObject, ListBackend, ShadowListKitListViewDataS
     case .append(let count):
       let total = controller.rows.count
       list.insertItems(at: IndexSet(integersIn: (total - count)..<total))
+    case .insert(let indices):
+      list.insertItems(at: indices)
+    case .delete(let indices):
+      list.deleteItems(at: indices)
     case .reset, .update:
       list.reloadData()
     }
@@ -323,6 +372,52 @@ final class ShadowListBackend: NSObject, ListBackend, ShadowListKitListViewDataS
 
   func listViewDidReachEnd(_ listView: ShadowListKitListView) {
     controller.onEndReached?()
+  }
+}
+
+/*
+ * Keeps the first visible row where it is on screen across a change that moves it in the
+ * content, the usual recipe of a table or a collection: read its place, change, lay out and put
+ * the offset back. frame gives a row's frame in the content by row index.
+ */
+struct VisibleAnchor {
+  private let index: Int
+  private let distance: CGFloat
+
+  init?(_ scrollView: UIScrollView, first index: Int?, frame: (Int) -> CGRect?) {
+    guard let index, let rect = frame(index) else { return nil }
+    self.index = index
+    distance = rect.minY - scrollView.contentOffset.y
+  }
+
+  /*
+   * Put the row back after the change. moved is the row's index after it, nil when it left.
+   */
+  func restore(_ scrollView: UIScrollView, moved: Int?, frame: (Int) -> CGRect?) {
+    guard let moved, let rect = frame(moved) else { return }
+    scrollView.layoutIfNeeded()
+    let inset = scrollView.adjustedContentInset
+    let maxOffset = max(-inset.top, scrollView.contentSize.height - scrollView.bounds.height + inset.bottom)
+    scrollView.contentOffset.y = min(max(-inset.top, rect.minY - distance), maxOffset)
+  }
+
+  /*
+   * Where the row is after rows were inserted at, or deleted from, these indices.
+   */
+  func moved(by change: RowChange) -> Int? {
+    switch change {
+    case .insert(let indices):
+      // Insert indices are places in the new rows: each one at or before the row pushes it on.
+      var moved = index
+      for inserted in indices where inserted <= moved {
+        moved += 1
+      }
+      return moved
+    case .delete(let indices):
+      return indices.contains(index) ? nil : index - indices.count(in: 0..<index)
+    default:
+      return index
+    }
   }
 }
 
@@ -397,7 +492,9 @@ final class TableHeader: UITableViewHeaderFooterView {
   }
 }
 
-final class TableBackend: NSObject, ListBackend, UITableViewDataSource, UITableViewDelegate, UITableViewDragDelegate, UITableViewDropDelegate {
+final class TableBackend: NSObject, ListBackend, UITableViewDataSource, UITableViewDelegate, UITableViewDataSourcePrefetching,
+  UITableViewDragDelegate, UITableViewDropDelegate
+{
   private unowned let controller: ListController
   private let table = UITableView(frame: .zero, style: .plain)
   private let inverted: Bool
@@ -418,6 +515,7 @@ final class TableBackend: NSObject, ListBackend, UITableViewDataSource, UITableV
     table.separatorStyle = .none
     table.dataSource = self
     table.delegate = self
+    table.prefetchDataSource = self
     table.sectionHeaderTopPadding = 0
     table.register(TableHeader.self, forHeaderFooterViewReuseIdentifier: "header")
     if controller.engine.selfSizing {
@@ -432,6 +530,37 @@ final class TableBackend: NSObject, ListBackend, UITableViewDataSource, UITableV
   }
 
   var scrollView: UIScrollView { table }
+
+  /*
+   * Rows of one height go in as the table's rowHeight without heightForRowAt, the fastest setup
+   * UITableView has. The table reads which delegate methods exist when the delegate is set.
+   */
+  func fixedRowHeightChanged() {
+    guard let height = controller.fixedRowHeight, !controller.engine.selfSizing else { return }
+    table.rowHeight = height
+    table.estimatedRowHeight = 0
+    table.delegate = nil
+    table.delegate = self
+  }
+
+  override func responds(to selector: Selector!) -> Bool {
+    if selector == #selector(UITableViewDelegate.tableView(_:heightForRowAt:)) {
+      return controller.fixedRowHeight == nil || controller.engine.selfSizing
+    }
+    return super.responds(to: selector)
+  }
+
+  /*
+   * Rows about to show get their layouts made off the main thread, ahead of the cells, the way
+   * the prefetching API is meant to be used.
+   */
+  func tableView(_ tableView: UITableView, prefetchRowsAt indexPaths: [IndexPath]) {
+    if BenchWindow.enabled, let last = indexPaths.max() {
+      BenchWindow.prefetched(tableView.rectForRow(at: last), in: tableView)
+    }
+    guard !controller.engine.selfSizing, !controller.prefetchPaused, let first = indexPaths.min() else { return }
+    controller.cache.prefetch(controller.rows, width: tableView.bounds.width, around: rowIndex(first), extent: controller.prefetchExtent)
+  }
 
   /*
    * Reordering through UITableView's own drag and drop, started by touch and hold.
@@ -582,6 +711,25 @@ final class TableBackend: NSObject, ListBackend, UITableViewDataSource, UITableV
       } else {
         table.reloadData()
       }
+    case .insert(let indices), .delete(let indices):
+      // One section: insertRows and deleteRows, with the first visible row kept in place.
+      guard sections.count == 1, previousSections.count == 1 else {
+        table.reloadData()
+        break
+      }
+      let frame: (Int) -> CGRect? = { [table] index in
+        index < table.numberOfRows(inSection: 0) ? table.rectForRow(at: IndexPath(row: index, section: 0)) : nil
+      }
+      let anchor = VisibleAnchor(table, first: table.indexPathsForVisibleRows?.first?.row, frame: frame)
+      let paths = indices.map { IndexPath(row: $0, section: 0) }
+      UIView.performWithoutAnimation {
+        if case .insert = change {
+          table.insertRows(at: paths, with: .none)
+        } else {
+          table.deleteRows(at: paths, with: .none)
+        }
+      }
+      anchor?.restore(table, moved: anchor?.moved(by: change), frame: frame)
     case .update:
       table.reloadData()
     }
@@ -652,6 +800,7 @@ final class TableBackend: NSObject, ListBackend, UITableViewDataSource, UITableV
   }
 
   func scrollViewDidScroll(_ scrollView: UIScrollView) {
+    controller.scrolled { table.indexPathsForVisibleRows?.first.map(rowIndex) }
     let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
     let window = scrollView.bounds.height
     let maxOffset = scrollView.contentSize.height - window + scrollView.adjustedContentInset.bottom
@@ -815,12 +964,211 @@ final class CollectionBackend: NSObject, ListBackend, UICollectionViewDataSource
   }
 
   func scrollViewDidScroll(_ scrollView: UIScrollView) {
+    controller.scrolled { collection.indexPathsForVisibleItems.min()?.item }
     if let footer {
       footer.frame = CGRect(x: 0, y: scrollView.contentSize.height - footer.frame.height, width: scrollView.bounds.width, height: footer.frame.height)
     }
     let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
     let window = scrollView.bounds.height
     if offset > scrollView.contentSize.height - 2 * window {
+      if endReachedArmed {
+        endReachedArmed = false
+        controller.onEndReached?()
+      }
+    } else {
+      endReachedArmed = true
+    }
+  }
+}
+
+// MARK: - UICollectionView, compositional and diffable
+
+/*
+ * A collection cell that shows one of the library's row views. Self-sizing asks it for its
+ * height: from the row's precomputed layout with the collection engine, through the row view's
+ * sizeThatFits with collection-auto. A row of a fixed height keeps the size the layout gave it.
+ */
+final class CompositionalCell: UICollectionViewCell {
+  private let host = RowHost()
+  private var row: ShadowListUtilsRow?
+  weak var controller: ListController?
+
+  func show(_ row: ShadowListUtilsRow, layout: ShadowListUtilsRowLayout?) {
+    self.row = row
+    host.show(row, layout: layout, in: contentView)
+  }
+
+  override func preferredLayoutAttributesFitting(_ attributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+    guard let controller, let row, controller.fixedRowHeight == nil else { return attributes }
+    let width = attributes.size.width
+    attributes.size.height =
+      controller.engine.selfSizing ? host.sizeThatFits(width: width).height : controller.cache.layout(row, width: width).height
+    return attributes
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    host.rowView?.frame = contentView.bounds
+  }
+}
+
+/*
+ * UICollectionView set up the way Apple recommends for a list: a compositional layout of one
+ * full width item per group, a diffable data source keyed by the row keys, and prefetching on,
+ * with the prefetch data source making the layouts of the rows about to show off the main thread.
+ * Rows take an absolute height when the screen gives one, else an estimate and self-sizing.
+ * Changes go through snapshots edited in place. Header and footer views are not shown.
+ */
+final class CompositionalBackend: NSObject, ListBackend, UICollectionViewDelegate, UICollectionViewDataSourcePrefetching {
+  private static let estimatedHeight: CGFloat = 120
+  private static let section = 0
+
+  private unowned let controller: ListController
+  private let collection: UICollectionView
+  private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
+  private var startReachedArmed = true
+  private var endReachedArmed = true
+
+  init(controller: ListController) {
+    self.controller = controller
+    let layout = UICollectionViewCompositionalLayout { [unowned controller] _, _ in
+      let height: NSCollectionLayoutDimension = controller.fixedRowHeight.map { .absolute($0) } ?? .estimated(Self.estimatedHeight)
+      let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: height)
+      let group = NSCollectionLayoutGroup.vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)])
+      return NSCollectionLayoutSection(group: group)
+    }
+    collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+    super.init()
+    collection.backgroundColor = AppTheme.colors.background
+    collection.alwaysBounceVertical = true
+    collection.delegate = self
+    collection.prefetchDataSource = self
+    collection.isPrefetchingEnabled = true
+    collection.register(CompositionalCell.self, forCellWithReuseIdentifier: "row")
+    dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { [unowned controller] collectionView, indexPath, _ in
+      let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "row", for: indexPath) as! CompositionalCell
+      let row = controller.rows[indexPath.item]
+      cell.controller = controller
+      cell.show(row, layout: controller.cachedLayout(row, width: collectionView.bounds.width))
+      return cell
+    }
+  }
+
+  var scrollView: UIScrollView { collection }
+  var reorderEnabled = false
+  var snapToItem = false
+  var header: UIView?
+  var footer: UIView?
+
+  func fixedRowHeightChanged() {
+    collection.collectionViewLayout.invalidateLayout()
+  }
+
+  func stickyIndicesChanged() {}
+
+  private func fullSnapshot() -> NSDiffableDataSourceSnapshot<Int, String> {
+    var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
+    snapshot.appendSections([Self.section])
+    snapshot.appendItems(controller.rows.map(\.key))
+    return snapshot
+  }
+
+  private func frame(_ index: Int) -> CGRect? {
+    guard index < collection.numberOfItems(inSection: Self.section) else { return nil }
+    return collection.layoutAttributesForItem(at: IndexPath(item: index, section: Self.section))?.frame
+  }
+
+  func rowsChanged(_ change: RowChange) {
+    defer {
+      startReachedArmed = true
+      endReachedArmed = true
+    }
+    let keys = controller.rows.map(\.key)
+    var snapshot = dataSource.snapshot()
+    switch change {
+    case .reset, .update:
+      dataSource.applySnapshotUsingReloadData(fullSnapshot())
+      return
+    case .append(let count):
+      snapshot.appendItems(Array(keys.suffix(count)), toSection: Self.section)
+      dataSource.apply(snapshot, animatingDifferences: false)
+      return
+    case .prepend(let count):
+      return apply(.insert(IndexSet(integersIn: 0..<count)), keys: keys, snapshot: &snapshot)
+    case .insert, .delete:
+      return apply(change, keys: keys, snapshot: &snapshot)
+    }
+  }
+
+  /*
+   * Insert or delete rows in the snapshot in place, with the first visible row kept still.
+   */
+  private func apply(_ change: RowChange, keys: [String], snapshot: inout NSDiffableDataSourceSnapshot<Int, String>) {
+    guard snapshot.numberOfSections == 1 else {
+      dataSource.applySnapshotUsingReloadData(fullSnapshot())
+      return
+    }
+    let first = collection.indexPathsForVisibleItems.min()?.item
+    let anchor = VisibleAnchor(collection, first: first, frame: frame)
+    switch change {
+    case .insert(let indices):
+      // Each run of new keys goes before the key that follows it, or at the end.
+      for range in indices.rangeView.reversed() {
+        let added = Array(keys[range])
+        if range.upperBound < keys.count {
+          snapshot.insertItems(added, beforeItem: keys[range.upperBound])
+        } else {
+          snapshot.appendItems(added, toSection: Self.section)
+        }
+      }
+    case .delete(let indices):
+      let previous = snapshot.itemIdentifiers
+      snapshot.deleteItems(indices.map { previous[$0] })
+    default:
+      break
+    }
+    dataSource.apply(snapshot, animatingDifferences: false)
+    anchor?.restore(collection, moved: anchor?.moved(by: change), frame: frame)
+  }
+
+  func scrollToItem(at index: Int, animated: Bool) {
+    guard index < collection.numberOfItems(inSection: Self.section) else { return }
+    collection.scrollToItem(at: IndexPath(item: index, section: Self.section), at: .top, animated: animated)
+  }
+
+  func scrollToEnd(animated: Bool) {
+    let count = collection.numberOfItems(inSection: Self.section)
+    if count > 0 {
+      collection.scrollToItem(at: IndexPath(item: count - 1, section: Self.section), at: .bottom, animated: animated)
+    }
+  }
+
+  func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+    if BenchWindow.enabled {
+      for path in indexPaths {
+        if let frame = collectionView.layoutAttributesForItem(at: path)?.frame {
+          BenchWindow.prefetched(frame, in: collectionView)
+        }
+      }
+    }
+    guard !controller.engine.selfSizing, !controller.prefetchPaused, let first = indexPaths.min() else { return }
+    controller.cache.prefetch(controller.rows, width: collectionView.bounds.width, around: first.item, extent: controller.prefetchExtent)
+  }
+
+  func scrollViewDidScroll(_ scrollView: UIScrollView) {
+    controller.scrolled { collection.indexPathsForVisibleItems.min()?.item }
+    let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+    let window = scrollView.bounds.height
+    let maxOffset = scrollView.contentSize.height - window + scrollView.adjustedContentInset.bottom
+    if offset < window {
+      if startReachedArmed {
+        startReachedArmed = false
+        controller.onStartReached?()
+      }
+    } else {
+      startReachedArmed = true
+    }
+    if offset > maxOffset - window {
       if endReachedArmed {
         endReachedArmed = false
         controller.onEndReached?()

@@ -221,7 +221,7 @@ public final class ShadowListUtilsInboxRowView: ShadowListUtilsRowView {
  * The selection circle of a row in a list that is editing: an outline, or a filled circle with
  * a drawn check when on.
  */
-final class ShadowListUtilsCheckCircle: ShadowListUtilsView {
+final class ShadowListUtilsCheckCircle: UIView {
   var colors: ShadowListUtilsThemeColors? {
     didSet { setNeedsDisplay() }
   }

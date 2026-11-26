@@ -13,6 +13,14 @@ class Example(val route: String, val title: String, val summary: String, val mak
 class ExampleSection(val title: String, val examples: List<Example>) {
   companion object {
     fun example(route: String): Example? = all.firstNotNullOfOrNull { section -> section.examples.firstOrNull { it.route == route } }
+      ?: benchOnly.firstOrNull { it.route == route }
+
+    /*
+     * Routes the bench opens by name that the home screen does not list.
+     */
+    private val benchOnly = listOf(
+      Example("Fixed", "Fixed", "Contacts of one height, for the bench") { context, engine -> FixedScreen(context, engine) },
+    )
 
     val all = listOf(
       ExampleSection("Feeds", listOf(
@@ -26,7 +34,7 @@ class ExampleSection(val title: String, val examples: List<Example>) {
         Example("Inbox", "Inbox", "Swipe actions, a menu on long press and selection") { context, _ -> InboxScreen(context) },
       )),
       ExampleSection("Lists", listOf(
-        Example("Activity", "Activity", "Opens partway down, loads in both directions") { context, _ -> ActivityScreen(context) },
+        Example("Activity", "Activity", "Opens partway down; pull to refresh prepends a new one") { context, _ -> ActivityScreen(context) },
         Example("Contacts", "Companions", "Swipe a row to remove it") { context, _ -> ContactsScreen(context) },
         Example("SectionList", "Directory", "Sections with sticky headers and an index") { context, engine -> DirectoryScreen(context, engine) },
         Example("Reorder", "Boarding Order", "Touch and hold a row, then drag it") { context, _ -> ReorderScreen(context) },

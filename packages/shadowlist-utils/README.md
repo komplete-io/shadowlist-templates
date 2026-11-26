@@ -113,7 +113,10 @@ Use edit helpers inside `queryClient.setQueryData`. For optimistic updates and r
 ### List state and scrolling
 
 `useListController` holds local data, loading flags and scrolling state. Its options include initial data, a
-`keyExtractor` (default `item.id`), refresh/page/scroll callbacks, `onError` and `scrollIdleMs` (150 ms).
+`keyExtractor` (default `item.id`), refresh/page/scroll callbacks, `onError` and `scrollIdleMs` (150 ms). Pass
+`handleScrollBeginDrag`, `handleScrollEndDrag`, `handleMomentumScrollBegin` and `handleMomentumScrollEnd` to the list
+and `scrolling` follows its drag and momentum events. With `handleScroll` alone it ends `scrollIdleMs` after the last
+scroll event.
 Use `setItems`, `prependItems`, `appendItems`, `upsertItems`, `updateItem` and `removeItems` to edit data; `markers`
 set loading/scrolling flags manually. See [controller types](src/useListController.ts) for callback signatures.
 
@@ -313,7 +316,8 @@ transport as well as finishing the writer when stopping a reply.
 
 | Export | Purpose |
 | --- | --- |
-| `Assistant.List` | Message list; requires `store`, accepts `streaming` and reply callbacks. Keeps the end in view as replies arrive and grow, `onAtEndChange` reports a reader who scrolled away or a scroll command that landed away from the end, and a drag dismisses the keyboard |
+| `Assistant.Conversation` | Shared empty state, transcript, composer, resume action and disclaimer; accepts content, session handlers and keyboard space. Empty suggestions are full-width grouped rows at every width. The composer uses theme radii with concentric inset controls |
+| `Assistant.List` | Message list; requires `store`, accepts `streaming`, reply callbacks and `renderReplyFooter` for application actions. Keeps the end in view as replies arrive and grow, `onAtEndChange` reports a reader who scrolled away or a scroll command that landed away from the end, and a drag dismisses the keyboard |
 | `Assistant.Composer` | Send/Stop, attachments and editing; ref supports `setDraft`, `clearDraft`, `focus`. Pass `value` and `onChangeText` to own the draft, and `accessory` for a control in its toolbar |
 | `createStreamStore`, `useStreamingTurn` | Store lifecycle and a subscription for each message |
 | `createTurnWriter` | Batched thinking/content, tool calls, completion, failure and stop |

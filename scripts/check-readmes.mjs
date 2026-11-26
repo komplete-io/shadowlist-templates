@@ -1,9 +1,9 @@
 /*
  * Checks every README in the repo: each local link and heading anchor resolves, and each table is
  * written compact, `| a | b |` with three-dash separators. This is what holds their layout because
- * Prettier leaves the READMEs alone (.prettierignore). It also checks the rows and lines a README
- * repeats from the build configuration (requirements and install versions), and compiles the
- * standalone examples.
+ * Prettier leaves the READMEs alone (.prettierignore). When configured, it also checks the rows
+ * and lines a README repeats from the build configuration (requirements and install versions),
+ * and compiles the standalone examples.
  *
  *   yarn docs:check
  *

@@ -1,7 +1,7 @@
 import UIKit
 
 /*
- * Selectable disclosure text has one TextKit configuration for background measurement and
+ * Selectable disclosure text has one TextKit configuration for measurement and
  * native selection/drawing. Layout instances contain immutable text, never a UIView or a
  * shared mutable text storage/layout manager.
  */

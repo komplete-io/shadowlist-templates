@@ -30,11 +30,6 @@ char32_t decodeUtf8(std::string_view text, std::size_t& offset);
 void appendUtf8(std::string& text, char32_t codePoint);
 
 /*
- * How many UTF-16 code units text takes.
- */
-std::size_t lengthUtf16(std::string_view text);
-
-/*
  * Whether codePoint is white space as a JS regular expression's \s and String.trim see it:
  * tab, line feed, vertical tab, form feed, carriage return, space, U+00A0, U+1680, U+2000 to
  * U+200A, U+2028, U+2029, U+202F, U+205F, U+3000 and U+FEFF.

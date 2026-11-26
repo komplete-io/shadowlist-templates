@@ -52,3 +52,8 @@ export type {
   AssistantFeedback,
   AssistantSuggestion,
 } from './types';
+
+export type {
+  AssistantConversationProps,
+  AssistantConversationContent,
+} from './AssistantConversation';

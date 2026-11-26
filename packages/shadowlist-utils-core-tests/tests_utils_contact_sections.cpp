@@ -1,30 +1,15 @@
 /*
- * Contact section tests: the section a contact's name falls in, and how contacts group into
- * sections.
+ * Contact section tests: the section a contact's name falls in.
  */
 
 #include "TestFramework.hpp"
 
 #include <shadowlist-utils-core/ContactSection.hpp>
 
-#include <cstddef>
 #include <string>
-#include <vector>
 
 using namespace slt;
 using namespace azimgd::shadowlist;
-
-namespace {
-
-std::vector<std::string> titlesOf(const std::vector<ContactSection>& sections) {
-  std::vector<std::string> titles;
-  for (const ContactSection& section : sections) {
-    titles.push_back(section.title);
-  }
-  return titles;
-}
-
-}
 
 TEST(a_contact_section_is_titled_with_the_first_letter_in_upper_case) {
   CHECK_EQ(sectionInitial("Ada"), std::string("A"));
@@ -53,32 +38,4 @@ TEST(a_contact_section_title_outside_ascii_is_left_to_the_host) {
   // U+00E9, and U+1F600 as one code point.
   CHECK_EQ(sectionInitial("\xC3\xA9mile"), std::string("\xC3\xA9"));
   CHECK_EQ(sectionInitial(" \xF0\x9F\x98\x80 Ada"), std::string("\xF0\x9F\x98\x80"));
-}
-
-TEST(contacts_group_by_title_and_keep_their_order_inside_a_section) {
-  std::vector<ContactSection> sections = groupContactsIntoSections({"B", "A", "B", "A", "C"});
-  CHECK(titlesOf(sections) == (std::vector<std::string>{"A", "B", "C"}));
-  CHECK(sections[0].items == (std::vector<std::size_t>{1, 3}));
-  CHECK(sections[1].items == (std::vector<std::size_t>{0, 2}));
-  CHECK(sections[2].items == (std::vector<std::size_t>{4}));
-}
-
-TEST(the_other_contact_section_goes_last) {
-  std::vector<ContactSection> sections = groupContactsIntoSections({"#", "Z", "#", "A"});
-  CHECK(titlesOf(sections) == (std::vector<std::string>{"A", "Z", "#"}));
-  CHECK(sections[2].items == (std::vector<std::size_t>{0, 2}));
-  CHECK(titlesOf(groupContactsIntoSections({"#"})) == (std::vector<std::string>{"#"}));
-}
-
-TEST(no_contacts_group_into_no_sections) {
-  CHECK(groupContactsIntoSections({}).empty());
-}
-
-TEST(contact_sections_sort_with_the_order_the_host_gives) {
-  // A host whose locale puts the titles in reverse. The other section still goes last.
-  std::vector<ContactSection> sections = groupContactsIntoSections(
-    {"A", "#", "C", "B"},
-    [](const std::string& first, const std::string& second) { return first > second; });
-  CHECK(titlesOf(sections) == (std::vector<std::string>{"C", "B", "A", "#"}));
-  CHECK(sections[3].items == (std::vector<std::size_t>{1}));
 }

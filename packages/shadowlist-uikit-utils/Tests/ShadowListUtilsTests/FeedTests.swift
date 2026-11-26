@@ -195,7 +195,10 @@ final class FeedTests: XCTestCase {
     XCTAssertEqual(strip.frame, layout.stripFrame)
     XCTAssertEqual(strip.subviews.compactMap { $0 as? ShadowListUtilsImageView }.map(\.frame), layout.stripImageFrames)
     XCTAssertEqual(strip.contentSize, CGSize(width: 3 * 288, height: 200))
-    XCTAssertEqual(strip.contentOffset.x, -4)
+    XCTAssertEqual(strip.contentOffset.x, 0)
+    // The first photo starts where the text column starts.
+    let first = try XCTUnwrap(strip.subviews.compactMap { $0 as? ShadowListUtilsImageView }.first)
+    XCTAssertEqual(first.convert(first.bounds, to: view).minX, 68)
   }
 
   func testAStripKeepsItsScrollPositionUntilItsKeyChanges() throws {
@@ -214,7 +217,7 @@ final class FeedTests: XCTestCase {
     XCTAssertEqual(strip.contentOffset.x, 300)
     view.configure(row(item(1, images: images)), layout: nil)
     view.layoutIfNeeded()
-    XCTAssertEqual(strip.contentOffset.x, -4)
+    XCTAssertEqual(strip.contentOffset.x, 0)
   }
 
   func testAPlaceholderRowReadsAsLoadingAndKeepsTheRowsHeight() throws {

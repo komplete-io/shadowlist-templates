@@ -6,8 +6,8 @@ export const MAX_ASPECT_RATIO = 16 / 9;
 
 /*
  * The frame of a post's single image: its own aspect kept between 3:4 and 16:9, or
- * SINGLE_IMAGE_HEIGHT tall when the image has no size. feedSingleImageFrame in the core's
- * utils/FeedImageFrame.hpp is the same rule, and vectors.test holds the two equal.
+ * SINGLE_IMAGE_HEIGHT tall when the image has no size. feedSingleImageFrame in
+ * shadowlist-utils-core/FeedImageFrame.hpp is the same rule, and vectors.test holds the two equal.
  */
 export function getSingleImageFrame(
   image: FeedImage

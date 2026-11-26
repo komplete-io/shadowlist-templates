@@ -21,7 +21,7 @@ private const val MINUTE_MS = 60_000.0
 private const val PLACEHOLDER_POSTS = 3
 
 /*
- * The fixtures as the items of the library's templates. Every screen maps through here.
+ * The fixtures as the items of the library's templates.
  */
 object Items {
   /*
@@ -82,7 +82,7 @@ object Items {
   )
 
   /*
-   * A shelf of twelve pictures under a traveller's name.
+   * A shelf of ten pictures grouped by destination category.
    */
   fun shelf(index: Int): ShadowListUtilsNestedItem {
     val categories = listOf("Weekend Escapes", "Island Hopping", "Dark-Sky Destinations", "Northern Lights Trips", "Mountain Airports", "City Breaks", "Desert Stargazing", "Scenic Approaches", "Last-Minute Deals", "Bucket-List Flights")

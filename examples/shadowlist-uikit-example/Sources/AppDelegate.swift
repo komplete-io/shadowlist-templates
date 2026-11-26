@@ -37,5 +37,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.rootViewController = navigation
     window.makeKeyAndVisible()
     self.window = window
+    RulerCapture.start(in: window, navigation: navigation)
   }
 }

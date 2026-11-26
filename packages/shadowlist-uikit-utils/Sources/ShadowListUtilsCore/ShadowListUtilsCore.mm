@@ -9,9 +9,8 @@
 #include <shadowlist-utils-core/FeedImageFrame.hpp>
 #include <shadowlist-utils-core/PollTally.hpp>
 #include <shadowlist-utils-core/Progress.hpp>
-#include <shadowlist-utils-core/MarkdownDocument.hpp>
-#include <shadowlist-utils-core/Text.hpp>
 #include <shadowlist-utils-core/RelativeTime.hpp>
+#include <shadowlist-utils-core/SafeUrl.hpp>
 #include <shadowlist-utils-core/Text.hpp>
 
 #include <string>
@@ -280,22 +279,14 @@ static NSString *makeString(const std::string& text)
   return ShadowListUtilsStepsOf(content, positions);
 }
 
-+ (NSArray<ShadowListUtilsMarkdownBlock *> *)parseMarkdown:(NSString *)source
-{
-  return ShadowListUtilsParseMarkdown(source);
-}
-
 + (BOOL)isSafeUrl:(NSString *)url
 {
-  NSData *utf8 = [url dataUsingEncoding:NSUTF8StringEncoding];
-  return isSafeUrl(std::string_view(static_cast<const char *>(utf8.bytes), utf8.length));
+  return isSafeUrl(readString(url));
 }
 
 + (NSString *)trim:(NSString *)text
 {
-  NSData *utf8 = [text dataUsingEncoding:NSUTF8StringEncoding];
-  const auto result = trim(std::string_view(static_cast<const char *>(utf8.bytes), utf8.length));
-  return [[NSString alloc] initWithBytes:result.data() length:result.size() encoding:NSUTF8StringEncoding];
+  return makeString(std::string(trim(readString(text))));
 }
 
 @end

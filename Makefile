@@ -55,11 +55,10 @@ test-core:
 	cmake --build $(CORE_TESTS)/build
 	ctest --test-dir $(CORE_TESTS)/build --output-on-failure
 
-# The fuzz tests run on one thread and are left out here. test-core runs them.
 test-core-tsan:
 	cmake -S $(CORE_TESTS) -B $(CORE_TESTS)/build-tsan -DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
 	cmake --build $(CORE_TESTS)/build-tsan
-	SLT_SKIP=fuzz_ $(CORE_TESTS)/build-tsan/shadowlist_utils_core_tests
+	$(CORE_TESTS)/build-tsan/shadowlist_utils_core_tests
 
 pods-macos:
 	cd examples/shadowlist-macos-example/macos && pod install

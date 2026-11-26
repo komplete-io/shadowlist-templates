@@ -12,6 +12,11 @@ enum class Engine(val id: String, val title: String) {
   SHADOWLIST_AUTO("sl-auto", "ShadowListKitListView (self-sizing)"),
   // RecyclerView with every row's height from the same precomputed layouts.
   RECYCLER("recycler", "RecyclerView"),
+  /*
+   * RecyclerView as recycler, with the views it keeps past the viewport matched to
+   * ShadowListKitListView's: half a viewport laid out on each side and a view cache for them.
+   */
+  RECYCLER_TUNED("recycler-tuned", "RecyclerView (tuned window)"),
   // RecyclerView with wrap_content rows measured on the UI thread.
   RECYCLER_AUTO("recycler-auto", "RecyclerView (self-sizing)");
 

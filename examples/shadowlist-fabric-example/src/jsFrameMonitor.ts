@@ -2,7 +2,7 @@ import { launchSetting } from './launchSettings';
 
 /*
  * BENCHMARK-ONLY. With SLJsFps 1, counts JS thread frames with requestAnimationFrame and logs
- * one [SLFPS] line per second while frames are late: frames, frames over 20 ms, the longest gap.
+ * one [SLFPS] line per second: frames, frames over 20 ms, the longest gap.
  * It measures any list the same way, with or without the native [SLC] trace.
  */
 /*

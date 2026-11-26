@@ -87,7 +87,7 @@ class ShadowListUtilsAssistantComposer(
       insets
     }
     field.background = android.graphics.drawable.GradientDrawable().apply {
-      setColor(theme.colors.elevated); cornerRadius = theme.radius.xl.pxf; setStroke(ShadowListUtilsTheme.HAIRLINE_PX, theme.colors.separator)
+      setColor(theme.colors.elevated); cornerRadius = (theme.radius.lg + theme.spacing.xs).pxf; setStroke(ShadowListUtilsTheme.HAIRLINE_PX, theme.colors.separator)
     }
     field.setPadding(ShadowListUtilsTheme.HAIRLINE_PX, theme.spacing.sm.px + ShadowListUtilsTheme.HAIRLINE_PX, ShadowListUtilsTheme.HAIRLINE_PX, ShadowListUtilsTheme.HAIRLINE_PX)
     editingBanner.addView(editingLabel, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
@@ -112,7 +112,7 @@ class ShadowListUtilsAssistantComposer(
      * React Native rounds the field's height once. The toolbar's bottom padding takes what the
      * top padding and the one-line input leave of that sum.
      */
-    val toolbarPadding = theme.spacing.xs + 2
+    val toolbarPadding = theme.spacing.xs
     val toolbarBottom = (theme.spacing.sm + ShadowListUtilsChatInput.INPUT_MIN_HEIGHT_DP + toolbarPadding).px -
       theme.spacing.sm.px - ShadowListUtilsChatInput.INPUT_MIN_HEIGHT_DP.px
     toolbar.setPadding(toolbarPadding.px, 0, toolbarPadding.px, toolbarBottom)
@@ -201,13 +201,19 @@ class ShadowListUtilsAssistantComposer(
     primaryAction.text = if (stop) "■" else ""
     primaryAction.contentDescription = if (stop) labels.stop else labels.send
     primaryAction.isEnabled = if (stop) onStop != null else draft && (!streaming || sendWhileStreaming) && onSend != null
-    modelButton.background = android.graphics.drawable.GradientDrawable().apply { setColor(theme.colors.fill); cornerRadius = 16f.pxf }
-    thinkingButton.background = android.graphics.drawable.GradientDrawable().apply { setColor(if (thinking) theme.colors.accentSoft else theme.colors.fill); cornerRadius = 16f.pxf }
+    for (button in listOf(attach, dictate)) {
+      button.background = android.graphics.drawable.GradientDrawable().apply {
+        setColor(if (button == dictate && dictating) theme.colors.accentSoft else android.graphics.Color.TRANSPARENT)
+        cornerRadius = theme.radius.lg.pxf
+      }
+    }
+    modelButton.background = android.graphics.drawable.GradientDrawable().apply { setColor(theme.colors.fill); cornerRadius = theme.radius.lg.pxf }
+    thinkingButton.background = android.graphics.drawable.GradientDrawable().apply { setColor(if (thinking) theme.colors.accentSoft else theme.colors.fill); cornerRadius = theme.radius.lg.pxf }
     primaryAction.textSize = 22f
     primaryAction.setTextColor(theme.colors.background)
     primaryAction.foreground = if (stop) null else ShadowListUtilsArrowUpIcon(if (primaryAction.isEnabled) theme.colors.label else theme.colors.secondaryLabel, 18f, 2.4f)
     primaryAction.background = android.graphics.drawable.GradientDrawable().apply {
-      shape = android.graphics.drawable.GradientDrawable.OVAL
+      cornerRadius = theme.radius.lg.pxf
       setColor(if (stop) theme.colors.label else if (primaryAction.isEnabled) theme.colors.accent else theme.colors.fill)
     }
     theme.typography.footnote.with(ShadowListUtilsFontWeight.SEMIBOLD).applyTo(modelButton, theme.colors.label)

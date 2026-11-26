@@ -23,16 +23,12 @@ export function fetchAssistantHistory(
   );
 }
 
-const feedbackByMessage = new Map<string, AssistantFeedback | undefined>();
-
-export function sendAssistantFeedback({
-  messageId,
-  feedback,
-}: {
+/*
+ * The request a real backend would store the feedback with. Nothing reads it back here.
+ */
+export function sendAssistantFeedback(_feedback: {
   messageId: string;
   feedback: AssistantFeedback | undefined;
 }): Promise<void> {
-  return request(() => {
-    feedbackByMessage.set(messageId, feedback);
-  });
+  return request(() => undefined);
 }

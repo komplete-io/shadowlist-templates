@@ -62,6 +62,13 @@ dependencies {
   // api because the template lists subclass ShadowListKitListView publicly.
   // The kit releases from the engine repo with its own version.
   api("io.github.azimgd:shadowlist-kit:${property("SHADOWLIST_KIT_VERSION")}")
+  val markdownGroup = if (System.getenv("JITPACK") == "true") {
+    "${System.getenv("GROUP") ?: "com.github.komplete-io"}.${System.getenv("ARTIFACT") ?: "shadowlist-templates"}"
+  } else "io.github.azimgd"
+  val markdownVersion = if (System.getenv("JITPACK") == "true") {
+    System.getenv("VERSION") ?: property("VERSION_NAME").toString()
+  } else property("VERSION_NAME").toString()
+  implementation("$markdownGroup:enriched-markdown-ui:$markdownVersion")
   // The tests run on a device or an emulator. They load the native core.
   androidTestImplementation("androidx.test:runner:1.6.2")
   androidTestImplementation("androidx.test.ext:junit:1.2.1")

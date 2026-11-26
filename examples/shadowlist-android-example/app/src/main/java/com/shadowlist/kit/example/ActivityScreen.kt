@@ -35,11 +35,6 @@ class ActivityScreen(context: Context) : Screen {
     list.scrollToItem(30)
   }
 
-  fun markAllRead() {
-    items = items.map { it.copy(read = true) }
-    list.setItems(items, animated = true)
-  }
-
   private fun activity(index: Int): ShadowListUtilsActivityItem {
     val actions = listOf("started following you", "liked your trip photo", "tagged you in a check-in",
       "added you to a trip crew", "commented on your itinerary", "is boarding at gate 22")

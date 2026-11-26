@@ -78,6 +78,16 @@ final class AssistantComponentsTests: XCTestCase {
     view.frame = CGRect(x: 0, y: 0, width: 390, height: 500)
     view.layoutIfNeeded()
     XCTAssertTrue(view.subviews.contains { $0.accessibilityLabel == "Where next?" })
+    for width in [CGFloat(320), 768, 1200] {
+      view.frame.size.width = width
+      view.setNeedsLayout(); view.layoutIfNeeded()
+      let group = view.subviews[0]
+      let buttons = group.subviews.compactMap { $0 as? UIButton }
+      XCTAssertEqual(group.layer.cornerRadius, theme.grouped.radius)
+      XCTAssertEqual(buttons[0].frame.minX, buttons[1].frame.minX)
+      XCTAssertEqual(buttons[0].frame.width, buttons[1].frame.width)
+      XCTAssertGreaterThanOrEqual(buttons[1].frame.minY, buttons[0].frame.maxY)
+    }
   }
 
   func testTypingAnimationStopsOnDetachAndHasOneLocalizedAccessibilityElement() {

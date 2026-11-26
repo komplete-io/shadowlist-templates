@@ -19,6 +19,7 @@ import com.shadowlist.utils.ShadowListUtilsChatMessage
 import com.shadowlist.utils.ShadowListUtilsChatMessageStatus
 import com.shadowlist.utils.ShadowListUtilsContactItem
 import com.shadowlist.utils.ShadowListUtilsContactRow
+import com.shadowlist.utils.ShadowListUtilsContactsList
 import com.shadowlist.utils.ShadowListUtilsContactsSectionList
 import com.shadowlist.utils.ShadowListUtilsFeedItem
 import com.shadowlist.utils.ShadowListUtilsFeedLabels
@@ -64,6 +65,13 @@ abstract class ListScreen(
   open fun prependRows() {}
   open fun appendRows() {}
 
+  /*
+   * Insert count new items before index, or delete count items from index, for the ops scenario.
+   * Screens without them return false.
+   */
+  open fun insertRows(index: Int, count: Int): Boolean = false
+  open fun deleteRows(index: Int, count: Int): Boolean = false
+
   protected fun <T> generate(count: Int, make: (Int) -> T): List<T> {
     val items = List(count) { make(generated + it) }
     generated += count
@@ -90,6 +98,18 @@ class FeedScreen(context: Context, engine: Engine) : ListScreen(context, engine,
   override fun appendRows() {
     items.addAll(generate(20, ::post))
     show(RowChange.Append(20))
+  }
+
+  override fun insertRows(index: Int, count: Int): Boolean {
+    items.addAll(index, generate(count, ::post))
+    show(RowChange.Insert(index, count))
+    return true
+  }
+
+  override fun deleteRows(index: Int, count: Int): Boolean {
+    items.subList(index, index + count).clear()
+    show(RowChange.Delete(index, count))
+    return true
   }
 
   private fun show(change: RowChange) {
@@ -148,6 +168,18 @@ class ChatScreen(context: Context, engine: Engine) :
     show(RowChange.Append(10))
   }
 
+  override fun insertRows(index: Int, count: Int): Boolean {
+    messages.addAll(index, generate(count, ::message))
+    show(RowChange.Insert(index, count))
+    return true
+  }
+
+  override fun deleteRows(index: Int, count: Int): Boolean {
+    messages.subList(index, index + count).clear()
+    show(RowChange.Delete(index, count))
+    return true
+  }
+
   /*
    * The messages as items. With SLStates every message whose index is 2 past a multiple of 5
    * carries a caption, the newest of the reader's own messages is on its way and the one before
@@ -179,6 +211,49 @@ class ChatScreen(context: Context, engine: Engine) :
   private companion object {
     const val CAPTION_EVERY = 5
     const val CAPTION_OFFSET = 2
+  }
+}
+
+/*
+ * Contacts of one height each, without sections. The bench's fixed height rows.
+ */
+class FixedScreen(context: Context, engine: Engine) :
+  ListScreen(context, engine, makeTemplate = { ShadowListUtilsContactsList(context) }) {
+  private val contacts = ArrayList<ShadowListUtilsContactItem>()
+
+  private fun contact(index: Int) = Items.contact(Contact(index))
+
+  override fun load() {
+    contacts.addAll(generate(Settings.count, ::contact))
+    show(RowChange.Reset)
+  }
+
+  override fun prependRows() {
+    contacts.addAll(0, generate(10, ::contact))
+    show(RowChange.Prepend(10))
+  }
+
+  override fun appendRows() {
+    contacts.addAll(generate(10, ::contact))
+    show(RowChange.Append(10))
+  }
+
+  override fun insertRows(index: Int, count: Int): Boolean {
+    contacts.addAll(index, generate(count, ::contact))
+    show(RowChange.Insert(index, count))
+    return true
+  }
+
+  override fun deleteRows(index: Int, count: Int): Boolean {
+    contacts.subList(index, index + count).clear()
+    show(RowChange.Delete(index, count))
+    return true
+  }
+
+  private fun show(change: RowChange) {
+    val template = list.template as? ShadowListUtilsContactsList
+    if (template != null) list.update(template) { template.setItems(ArrayList(contacts), Settings.animate) }
+    else list.setRows(contacts.map { ShadowListUtilsContactRow(it, false, theme) }, change)
   }
 }
 
@@ -272,6 +347,7 @@ class MainActivity : Activity() {
     // SLImages 0: no image loads, for runs that measure the lists alone.
     if (!Settings.images) ShadowListUtilsImageLoader.shared = NoImageLoader
     val route = Settings.route
+    MountClock.start()
     val contactName = intent.getStringExtra("SLContactName")
     val screen = if (route == "ContactDetail" && contactName != null) {
       ContactDetailScreen(this, ShadowListUtilsContactItem(
@@ -289,6 +365,7 @@ class MainActivity : Activity() {
     window.decorView.setBackgroundColor(listTheme.colors.background)
     setContentView(insetFrame(page(screen.view, route)))
     screen.load()
+    MountClock.stopAtFirstFrame(window.decorView, Settings.engine, route)
     ShadowListKitBench.startIfRequested(this, intent)
     if (screen is ListScreen) Scenario.startIfRequested(screen, intent)
     (screen.view as? ShadowListKitListView)?.let { AccessibilityCheck.runIfRequested(it) }

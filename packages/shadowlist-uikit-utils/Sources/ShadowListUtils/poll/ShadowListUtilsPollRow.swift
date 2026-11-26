@@ -66,7 +66,7 @@ public struct ShadowListUtilsPollRow: ShadowListUtilsRow {
                               width: Self.selectionSize, height: initial.size.height)
     let bodyTop = top + (contentHeight - bodyHeight) / 2
     let percentFrame = CGRect(
-      CGPoint(x: width - spacing.lg - percentText.size.width, y: bodyTop + (bodyTopHeight - percentText.size.height) / 2), percentText)
+      CGPoint(x: width - spacing.lg - percentText.size.width, y: bodyTop + ShadowListUtilsPlatform.floorToPixel((bodyTopHeight - percentText.size.height) / 2)), percentText)
     let labelFrame = CGRect(CGPoint(x: bodyX, y: bodyTop + (bodyTopHeight - label.size.height) / 2), label)
     let barFrame = CGRect(x: bodyX, y: bodyTop + bodyTopHeight + spacing.sm, width: bodyWidth, height: Self.barHeight)
     let fillWidth = bodyWidth * CGFloat(max(0, min(100, percent))) / 100

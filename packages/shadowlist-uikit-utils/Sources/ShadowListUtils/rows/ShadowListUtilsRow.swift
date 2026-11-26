@@ -1,8 +1,8 @@
 import UIKit
 
 /*
- * The model of what one cell shows. Its layout is a pure function of the row and a width, safe
- * to compute off the main thread, and its view only copies the frames the layout holds.
+ * The model of what one cell shows. Its layout supplies the frames its view uses. Assistant
+ * rows require the main thread; other rows support background measurement.
  */
 public protocol ShadowListUtilsRow {
   /*

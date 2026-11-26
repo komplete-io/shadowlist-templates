@@ -103,18 +103,8 @@ class ShadowListUtilsAssistantUserMessage(
                         theme: ShadowListUtilsTheme, labels: ShadowListUtilsAssistantLabels): Layout {
       val spacing = theme.spacing
       val body = theme.typography.body
-      val metrics = DoubleArray(ShadowListUtilsCore.CHAT_METRIC_SLOTS)
-      metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_XXS] = spacing.xxs.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_XS] = spacing.xs.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_SM] = spacing.sm.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_MD] = spacing.md.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_LG] = spacing.lg.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_BODY_FONT_SIZE] = body.fontSize.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_BODY_LINE_HEIGHT] = body.scaledLineHeightPx().toFloat().dp.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_BODY_LETTER_SPACING] = body.letterSpacing.toDouble()
-      metrics[ShadowListUtilsCore.CHAT_METRIC_CAPTION_LINE_HEIGHT] = theme.typography.caption.scaledLineHeightPx().toFloat().dp.toDouble()
       val spec = DoubleArray(ShadowListUtilsCore.CHAT_OUT_SLOTS)
-      ShadowListUtilsCore.assistantUserMessageSizeSpec(true, false, metrics, spec)
+      ShadowListUtilsCore.assistantUserMessageSizeSpec(true, false, ShadowListUtilsCore.chatMetrics(theme), spec)
       val textWidth = floor(spec[ShadowListUtilsCore.CHAT_OUT_WIDTH_FRACTION] * widthPx - spec[ShadowListUtilsCore.CHAT_OUT_INSET_WIDTH].toFloat().pxf).toInt().coerceAtLeast(1)
       val line = body.layout(message.text, textWidth)
       val paddingX = ShadowListUtilsCore.ASSISTANT_USER_BUBBLE_PADDING_HORIZONTAL_DP.px

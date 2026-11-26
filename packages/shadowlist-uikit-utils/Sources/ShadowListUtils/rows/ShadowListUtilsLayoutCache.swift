@@ -1,10 +1,13 @@
 import Foundation
 import os
+import UIKit
 
 /*
  * Row layouts by row key, filled ahead on a background queue. A layout is kept for the reuse
  * identifier, the width and the content version it was made for, and made again when one
- * differs. Every method is thread safe.
+ * differs. Each prefetch drops the layouts of rows further than twice prefetchRadius from where it starts,
+ * which bounds the cache however far the list scrolls, and a memory warning drops them all.
+ * layout requires the main thread for ShadowListUtilsMainThreadRow; prefetch skips those rows.
  */
 public final class ShadowListUtilsLayoutCache {
   private struct Entry {
@@ -26,19 +29,34 @@ public final class ShadowListUtilsLayoutCache {
   }
 
   /*
-   * How many rows on each side of the given index one prefetch lays out.
+   * The most rows on each side of the given index one prefetch lays out. A prefetch given an
+   * extent stops sooner on a side, once the rows it laid out there are that long. It keeps twice
+   * as many rows on each side as it reached.
    */
-  static let prefetchRadius = 250
+  static let prefetchRadius = 100
 
   private let state = OSAllocatedUnfairLock(uncheckedState: State())
   private let queue = DispatchQueue(label: "com.shadowlist.utils.layout", qos: .userInitiated)
 
-  public init() {}
+  private var memoryWarning: NSObjectProtocol?
+
+  public init() {
+    memoryWarning = NotificationCenter.default.addObserver(
+      forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil
+    ) { [weak self] _ in
+      self?.invalidateAll()
+    }
+  }
+
+  deinit {
+    memoryWarning.map(NotificationCenter.default.removeObserver)
+  }
 
   /*
    * The row's layout for a width, from the cache or computed now.
    */
   public func layout(_ row: ShadowListUtilsRow, width: CGFloat) -> ShadowListUtilsRowLayout {
+    precondition(!(row is ShadowListUtilsMainThreadRow) || Thread.isMainThread)
     let key = row.key
     let reuseIdentifier = row.reuseIdentifier
     let contentVersion = row.contentVersion
@@ -63,10 +81,11 @@ public final class ShadowListUtilsLayoutCache {
 
   /*
    * Lay out rows the list has not reached yet, off the main thread: the row at the given index
-   * and up to prefetchRadius rows on each side of it, nearest first. A newer call replaces the
-   * one still running.
+   * and the rows on each side of it, nearest first, up to prefetchRadius rows or extent points
+   * on a side. The layouts of rows further away than twice that are dropped, and of rows further
+   * than twice the radius before it starts. A newer call replaces the one still running.
    */
-  public func prefetch(_ rows: [ShadowListUtilsRow], width: CGFloat, around index: Int = 0) {
+  public func prefetch(_ rows: [ShadowListUtilsRow], width: CGFloat, around index: Int = 0, extent: CGFloat = .infinity) {
     guard width > 0, !rows.isEmpty else { return }
     let generation = state.withLockUnchecked { state -> Int in
       state.generation += 1
@@ -74,14 +93,55 @@ public final class ShadowListUtilsLayoutCache {
     }
     let center = min(max(index, 0), rows.count - 1)
     queue.async { [weak self] in
-      // Outward from the center: the row there, then one further on each side.
-      for distance in 0...Self.prefetchRadius {
-        if center + distance >= rows.count, center - distance < 0 { return }
-        for position in distance == 0 ? [center] : [center + distance, center - distance] where rows.indices.contains(position) {
-          guard let self, self.state.withLockUnchecked({ $0.generation == generation }) else { return }
-          _ = self.layout(rows[position], width: width)
+      guard let self else { return }
+      // A prefetch a newer one cuts short still bounds the cache by twice the radius.
+      self.dropLayouts(
+        outside: rows, from: max(0, center - 2 * Self.prefetchRadius), through: min(rows.count - 1, center + 2 * Self.prefetchRadius),
+        generation: generation)
+      // Outward from the center, a row on each side in turn, until each side is long enough.
+      var low = center
+      var high = center
+      var lowLength: CGFloat = 0
+      var highLength: CGFloat = 0
+      guard self.prefetchRow(rows[center], width: width, generation: generation) != nil else { return }
+      for _ in 0..<Self.prefetchRadius {
+        let lowNext = low > 0 && lowLength <= extent
+        let highNext = high < rows.count - 1 && highLength <= extent
+        if !lowNext && !highNext { break }
+        if highNext {
+          guard let height = self.prefetchRow(rows[high + 1], width: width, generation: generation) else { return }
+          high += 1
+          highLength += height
+        }
+        if lowNext {
+          guard let height = self.prefetchRow(rows[low - 1], width: width, generation: generation) else { return }
+          low -= 1
+          lowLength += height
         }
       }
+      self.dropLayouts(outside: rows, from: max(0, 2 * low - center), through: min(rows.count - 1, 2 * high - center), generation: generation)
+    }
+  }
+
+  /*
+   * A prefetched row's height, or nil when a newer prefetch started.
+   */
+  private func prefetchRow(_ row: ShadowListUtilsRow, width: CGFloat, generation: Int) -> CGFloat? {
+    guard state.withLockUnchecked({ $0.generation == generation }) else { return nil }
+    // Skip UIKit-backed rows; zero only advances this speculative traversal, never a cached height.
+    if row is ShadowListUtilsMainThreadRow { return 0 }
+    return layout(row, width: width).height
+  }
+
+  /*
+   * Drop the layouts of every key but the rows from low through high, unless a newer prefetch
+   * started.
+   */
+  private func dropLayouts(outside rows: [ShadowListUtilsRow], from low: Int, through high: Int, generation: Int) {
+    let kept = Set(rows[low...high].map(\.key))
+    state.withLockUnchecked { state in
+      guard state.generation == generation else { return }
+      state.entries = state.entries.filter { kept.contains($0.key) }
     }
   }
 

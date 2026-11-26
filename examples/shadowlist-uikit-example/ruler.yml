@@ -1,0 +1,9 @@
+# Links ShadowRuler into the example for layout checks, when generate.sh runs with
+# SHADOWRULER_ROOT set to a shadowruler checkout. RulerCapture.swift compiles to nothing without it.
+packages:
+  ShadowRuler:
+    path: ${SHADOWRULER_ROOT}
+targets:
+  ShadowListKitExample:
+    dependencies:
+      - package: ShadowRuler

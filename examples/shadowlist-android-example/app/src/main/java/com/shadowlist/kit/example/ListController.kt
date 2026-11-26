@@ -20,8 +20,7 @@ import com.shadowlist.utils.ShadowListUtilsRow
 import com.shadowlist.utils.ShadowListUtilsRowLayout
 import com.shadowlist.utils.ShadowListUtilsRowView
 import java.util.WeakHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
 
 /*
  * How a new set of rows relates to the shown one.
@@ -31,6 +30,8 @@ sealed class RowChange {
   object Update : RowChange()
   class Prepend(val count: Int) : RowChange()
   class Append(val count: Int) : RowChange()
+  class Insert(val index: Int, val count: Int) : RowChange()
+  class Delete(val index: Int, val count: Int) : RowChange()
 }
 
 /*
@@ -61,9 +62,7 @@ class ListController(
    */
   val layouts = ShadowListUtilsLayoutCache()
   private val columnWidth = Resources.getSystem().displayMetrics.widthPixels / columns
-  private val executor = Executors.newSingleThreadExecutor()
   private val main = Handler(Looper.getMainLooper())
-  private val generation = AtomicInteger()
 
   /*
    * Whether row views get layouts computed ahead off the UI thread.
@@ -78,7 +77,7 @@ class ListController(
   val backend: ListBackend = when {
     template != null -> TemplateBackend(template, this)
     engine.isShadowList -> SelfSizingBackend(context, this, inverted, columns)
-    else -> RecyclerBackend(context, this, inverted, columns)
+    else -> RecyclerBackend(context, this, inverted, columns, tuned = engine == Engine.RECYCLER_TUNED)
   }
 
   var rows: List<ShadowListUtilsRow> = emptyList()
@@ -114,25 +113,27 @@ class ListController(
   }
 
   /*
-   * Lay out every row off the UI thread, the last ones first. The bench compares the engines on
-   * sizes known ahead, and the cache's own prefetch stops a few hundred rows from where it starts.
+   * Lay out rows off the UI thread around the given row, the window the template list prefetches
+   * (ShadowListUtilsLayoutCache.prefetch). A row outside it is laid out when it is bound, the way a
+   * template list lays out a row its prefetch has not reached.
    */
-  private fun precompute(rows: List<ShadowListUtilsRow>) {
+  private fun precompute(rows: List<ShadowListUtilsRow>, around: Int = 0) {
     if (prefetchPaused) return
-    val current = generation.incrementAndGet()
-    executor.execute {
-      for (index in rows.indices.reversed()) {
-        if (generation.get() != current) return@execute
-        layouts.layout(rows[index], columnWidth)
-      }
-    }
+    layouts.prefetch(rows, columnWidth, around)
   }
 
   /*
-   * Run work on the main thread once the layouts queued so far are made.
+   * The engine scrolled near another row. Lay out the rows around it ahead.
+   */
+  fun prefetchAround(index: Int) {
+    if (precomputed && template == null) precompute(rows, index)
+  }
+
+  /*
+   * Run work on the main thread on its next turn.
    */
   fun whenIdle(work: () -> Unit) {
-    executor.execute { main.post(work) }
+    main.post(work)
   }
 
   /*
@@ -263,6 +264,8 @@ private class SelfSizingBackend(
   override fun setRows(rows: List<ShadowListUtilsRow>, change: RowChange) = when (change) {
     is RowChange.Prepend -> list.insertItems(IntArray(change.count) { it })
     is RowChange.Append -> list.insertItems(IntArray(change.count) { rows.size - change.count + it })
+    is RowChange.Insert -> list.insertItems(IntArray(change.count) { change.index + it })
+    is RowChange.Delete -> list.deleteItems(IntArray(change.count) { change.index + it })
     else -> list.reloadData()
   }
 
@@ -286,6 +289,7 @@ private class RecyclerBackend(
   private val controller: ListController,
   inverted: Boolean,
   private val columns: Int,
+  private val tuned: Boolean,
 ) : ListBackend {
   private val recycler = RecyclerView(context)
   private val adapter = RowAdapter()
@@ -303,11 +307,21 @@ private class RecyclerBackend(
     recycler.layoutManager = if (columns > 1) {
       StaggeredGridLayoutManager(columns, StaggeredGridLayoutManager.VERTICAL)
     } else {
-      LinearLayoutManager(context).apply { stackFromEnd = inverted }
-    }
+      if (tuned) WindowLayoutManager(context, recycler) else LinearLayoutManager(context)
+    }.also { (it as? LinearLayoutManager)?.stackFromEnd = inverted }
     adapter.setHasStableIds(true)
     recycler.adapter = adapter
     recycler.addItemDecoration(sticky)
+    recycler.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+      private var prefetchedAt = 0
+
+      override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+        val first = recyclerView.getChildAt(0)?.let { recyclerView.getChildAdapterPosition(it) } ?: return
+        if (first < 0 || abs(first - prefetchedAt) < PREFETCH_STEP_ROWS) return
+        prefetchedAt = first
+        controller.prefetchAround(first)
+      }
+    })
   }
 
   private inner class RowAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -317,7 +331,9 @@ private class RecyclerBackend(
 
     override fun getItemViewType(position: Int): Int {
       val row = controller.rows.getOrNull(position) ?: return FOOTER_TYPE
-      return viewTypes.getOrPut(row.reuseIdentifier) { viewTypes.size }.also { viewTypeRows[it] = row }
+      return viewTypes.getOrPut(row.reuseIdentifier) {
+        viewTypes.size.also { if (tuned) recycler.recycledViewPool.setMaxRecycledViews(it, TUNED_POOL_SIZE) }
+      }.also { viewTypeRows[it] = row }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -355,6 +371,8 @@ private class RecyclerBackend(
     when (change) {
       is RowChange.Prepend -> adapter.notifyItemRangeInserted(0, change.count)
       is RowChange.Append -> adapter.notifyItemRangeInserted(rows.size - change.count, change.count)
+      is RowChange.Insert -> adapter.notifyItemRangeInserted(change.index, change.count)
+      is RowChange.Delete -> adapter.notifyItemRangeRemoved(change.index, change.count)
       else -> {
         @Suppress("NotifyDataSetChanged")
         adapter.notifyDataSetChanged()
@@ -375,6 +393,29 @@ private class RecyclerBackend(
 
   companion object {
     const val FOOTER_TYPE = Int.MAX_VALUE
+
+    /*
+     * Spare views of each row type a tuned list keeps, enough for the half viewport it lays out
+     * on each side to come back from the pool during a fling.
+     */
+    const val TUNED_POOL_SIZE = 20
+
+    /*
+     * Rows scrolled past before the layouts around the new position are made ahead.
+     */
+    const val PREFETCH_STEP_ROWS = 50
+  }
+}
+
+/*
+ * Lays out half a viewport past each end, the rows ShadowListKitListView keeps mounted at its
+ * default mountOverscan of 0.5, where LinearLayoutManager lays out none and prefetches one row.
+ */
+private class WindowLayoutManager(context: Context, private val recycler: RecyclerView) : LinearLayoutManager(context) {
+  override fun calculateExtraLayoutSpace(state: RecyclerView.State, extraLayoutSpace: IntArray) {
+    val half = recycler.height / 2
+    extraLayoutSpace[0] = half
+    extraLayoutSpace[1] = half
   }
 }
 

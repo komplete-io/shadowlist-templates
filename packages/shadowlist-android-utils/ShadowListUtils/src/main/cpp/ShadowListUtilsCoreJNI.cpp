@@ -20,7 +20,7 @@
 #include <shadowlist-utils-core/FeedImageFrame.hpp>
 #include <shadowlist-utils-core/PollTally.hpp>
 #include <shadowlist-utils-core/Progress.hpp>
-#include <shadowlist-utils-core/MarkdownDocument.hpp>
+#include <shadowlist-utils-core/SafeUrl.hpp>
 #include <shadowlist-utils-core/RelativeTime.hpp>
 #include <shadowlist-utils-core/Text.hpp>
 #include <shadowlist-utils-core/WrapLayout.hpp>
@@ -156,6 +156,37 @@ jstring makeString(JNIEnv* env, const std::string& text) {
   return env->NewString(units.data(), static_cast<jsize>(units.size()));
 }
 
+/*
+ * The metrics of a size spec call, read from their slots. False when an array is missing or
+ * too short for its slots, out included, so a caller can stop before it computes anything.
+ */
+bool readChatMetrics(JNIEnv* env, jdoubleArray metrics, jdoubleArray out, sl::ChatBubbleMetrics& bubble) {
+  if (metrics == nullptr || out == nullptr || env->GetArrayLength(metrics) < CHAT_METRIC_SLOTS ||
+    env->GetArrayLength(out) < CHAT_OUT_SLOTS) {
+    return false;
+  }
+  jdouble in[CHAT_METRIC_SLOTS];
+  env->GetDoubleArrayRegion(metrics, 0, CHAT_METRIC_SLOTS, in);
+  bubble.spacingXxs = in[CHAT_METRIC_SPACING_XXS];
+  bubble.spacingXs = in[CHAT_METRIC_SPACING_XS];
+  bubble.spacingSm = in[CHAT_METRIC_SPACING_SM];
+  bubble.spacingMd = in[CHAT_METRIC_SPACING_MD];
+  bubble.spacingLg = in[CHAT_METRIC_SPACING_LG];
+  bubble.bodyFontSize = in[CHAT_METRIC_BODY_FONT_SIZE];
+  bubble.bodyLineHeight = in[CHAT_METRIC_BODY_LINE_HEIGHT];
+  bubble.bodyLetterSpacing = in[CHAT_METRIC_BODY_LETTER_SPACING];
+  bubble.captionLineHeight = in[CHAT_METRIC_CAPTION_LINE_HEIGHT];
+  return true;
+}
+
+void writeSizeSpec(JNIEnv* env, const sl::RowSizeSpec& spec, jdoubleArray out) {
+  jdouble values[CHAT_OUT_SLOTS];
+  values[CHAT_OUT_INSET_WIDTH] = spec.insetWidth;
+  values[CHAT_OUT_INSET_HEIGHT] = spec.insetHeight;
+  values[CHAT_OUT_WIDTH_FRACTION] = spec.widthFraction;
+  env->SetDoubleArrayRegion(out, 0, CHAT_OUT_SLOTS, values);
+}
+
 }
 
 #define SHADOWLIST_UTILS_JNI(name) Java_com_shadowlist_utils_ShadowListUtilsCore_##name
@@ -238,23 +269,10 @@ JNIEXPORT jboolean JNICALL SHADOWLIST_UTILS_JNI(nativeChatMessageSizeSpec)(
   jint shapeFlags,
   jdoubleArray metrics,
   jdoubleArray out) {
-  if (metrics == nullptr || out == nullptr || env->GetArrayLength(metrics) < CHAT_METRIC_SLOTS ||
-    env->GetArrayLength(out) < CHAT_OUT_SLOTS) {
+  sl::ChatBubbleMetrics bubble;
+  if (!readChatMetrics(env, metrics, out, bubble)) {
     return JNI_FALSE;
   }
-  jdouble in[CHAT_METRIC_SLOTS];
-  env->GetDoubleArrayRegion(metrics, 0, CHAT_METRIC_SLOTS, in);
-
-  sl::ChatBubbleMetrics bubble;
-  bubble.spacingXxs = in[CHAT_METRIC_SPACING_XXS];
-  bubble.spacingXs = in[CHAT_METRIC_SPACING_XS];
-  bubble.spacingSm = in[CHAT_METRIC_SPACING_SM];
-  bubble.spacingMd = in[CHAT_METRIC_SPACING_MD];
-  bubble.spacingLg = in[CHAT_METRIC_SPACING_LG];
-  bubble.bodyFontSize = in[CHAT_METRIC_BODY_FONT_SIZE];
-  bubble.bodyLineHeight = in[CHAT_METRIC_BODY_LINE_HEIGHT];
-  bubble.bodyLetterSpacing = in[CHAT_METRIC_BODY_LETTER_SPACING];
-  bubble.captionLineHeight = in[CHAT_METRIC_CAPTION_LINE_HEIGHT];
 
   sl::ChatMessageShape shape;
   shape.hasText = (shapeFlags & CHAT_SHAPE_HAS_TEXT) != 0;
@@ -268,11 +286,7 @@ JNIEXPORT jboolean JNICALL SHADOWLIST_UTILS_JNI(nativeChatMessageSizeSpec)(
   if (!sl::chatMessageSizeSpec(shape, bubble, spec)) {
     return JNI_FALSE;
   }
-  jdouble values[CHAT_OUT_SLOTS];
-  values[CHAT_OUT_INSET_WIDTH] = spec.insetWidth;
-  values[CHAT_OUT_INSET_HEIGHT] = spec.insetHeight;
-  values[CHAT_OUT_WIDTH_FRACTION] = spec.widthFraction;
-  env->SetDoubleArrayRegion(out, 0, CHAT_OUT_SLOTS, values);
+  writeSizeSpec(env, spec, out);
   return JNI_TRUE;
 }
 
@@ -409,50 +423,6 @@ JNIEXPORT jintArray JNICALL SHADOWLIST_UTILS_JNI(nativeBoardMovePlan)(
   return result;
 }
 
-/*
- * Copy the shared AST without parsing or interpreting Markdown in a platform language.
- */
-JNIEXPORT jobjectArray JNICALL SHADOWLIST_UTILS_JNI(nativeParseMarkdown)(JNIEnv* env, jclass, jstring source) {
-  auto blocks = sl::parseMarkdown(readString(env, source));
-  jclass blockClass = env->FindClass("com/shadowlist/utils/ShadowListUtilsMarkdownBlock");
-  jclass inlineClass = env->FindClass("com/shadowlist/utils/ShadowListUtilsMarkdownInline");
-  jclass runClass = env->FindClass("[Lcom/shadowlist/utils/ShadowListUtilsMarkdownInline;");
-  jmethodID inlineInit = env->GetMethodID(inlineClass, "<init>", "(ILjava/lang/String;Ljava/lang/String;)V");
-  jmethodID blockInit = env->GetMethodID(blockClass, "<init>",
-    "(ILjava/lang/String;Ljava/lang/String;[[Lcom/shadowlist/utils/ShadowListUtilsMarkdownInline;[IIZDLjava/lang/String;Ljava/lang/String;Z)V");
-  jobjectArray result = env->NewObjectArray(static_cast<jsize>(blocks.size()), blockClass, nullptr);
-  for (std::size_t index = 0; index < blocks.size(); ++index) {
-    env->PushLocalFrame(32);
-    const auto& block = blocks[index];
-    jobjectArray runs = env->NewObjectArray(static_cast<jsize>(block.runs.size()), runClass, nullptr);
-    for (std::size_t rowIndex = 0; rowIndex < block.runs.size(); ++rowIndex) {
-      const auto& row = block.runs[rowIndex];
-      jobjectArray inlines = env->NewObjectArray(static_cast<jsize>(row.size()), inlineClass, nullptr);
-      for (std::size_t runIndex = 0; runIndex < row.size(); ++runIndex) {
-        const auto& run = row[runIndex];
-        jstring text = makeString(env, run.text);
-        jstring href = run.hasHref ? makeString(env, run.href) : nullptr;
-        jobject copy = env->NewObject(inlineClass, inlineInit, static_cast<jint>(run.style), text, href);
-        env->SetObjectArrayElement(inlines, static_cast<jsize>(runIndex), copy);
-        env->DeleteLocalRef(copy);
-        env->DeleteLocalRef(text);
-        if (href) env->DeleteLocalRef(href);
-      }
-      env->SetObjectArrayElement(runs, static_cast<jsize>(rowIndex), inlines);
-      env->DeleteLocalRef(inlines);
-    }
-    std::vector<jint> counts(block.rowCellCounts.begin(), block.rowCellCounts.end());
-    jintArray rowCounts = env->NewIntArray(static_cast<jsize>(counts.size()));
-    if (!counts.empty()) env->SetIntArrayRegion(rowCounts, 0, static_cast<jsize>(counts.size()), counts.data());
-    jobject copy = env->NewObject(blockClass, blockInit, static_cast<jint>(block.type), makeString(env, block.key),
-      makeString(env, block.raw), runs, rowCounts, static_cast<jint>(block.level), static_cast<jboolean>(block.ordered),
-      block.start, makeString(env, block.language), makeString(env, block.code), static_cast<jboolean>(block.closed));
-    env->SetObjectArrayElement(result, static_cast<jsize>(index), copy);
-    env->PopLocalFrame(nullptr);
-  }
-  return result;
-}
-
 JNIEXPORT jboolean JNICALL SHADOWLIST_UTILS_JNI(nativeIsSafeUrl)(JNIEnv* env, jclass, jstring url) {
   return sl::isSafeUrl(readString(env, url));
 }
@@ -464,33 +434,16 @@ JNIEXPORT jboolean JNICALL SHADOWLIST_UTILS_JNI(nativeAssistantUserMessageSizeSp
   jboolean hasAttachments,
   jdoubleArray metrics,
   jdoubleArray out) {
-  if (metrics == nullptr || out == nullptr || env->GetArrayLength(metrics) < CHAT_METRIC_SLOTS ||
-    env->GetArrayLength(out) < CHAT_OUT_SLOTS) {
+  sl::ChatBubbleMetrics bubble;
+  if (!readChatMetrics(env, metrics, out, bubble)) {
     return JNI_FALSE;
   }
-  jdouble in[CHAT_METRIC_SLOTS];
-  env->GetDoubleArrayRegion(metrics, 0, CHAT_METRIC_SLOTS, in);
-
-  sl::ChatBubbleMetrics bubble;
-  bubble.spacingXxs = in[CHAT_METRIC_SPACING_XXS];
-  bubble.spacingXs = in[CHAT_METRIC_SPACING_XS];
-  bubble.spacingSm = in[CHAT_METRIC_SPACING_SM];
-  bubble.spacingMd = in[CHAT_METRIC_SPACING_MD];
-  bubble.spacingLg = in[CHAT_METRIC_SPACING_LG];
-  bubble.bodyFontSize = in[CHAT_METRIC_BODY_FONT_SIZE];
-  bubble.bodyLineHeight = in[CHAT_METRIC_BODY_LINE_HEIGHT];
-  bubble.bodyLetterSpacing = in[CHAT_METRIC_BODY_LETTER_SPACING];
-  bubble.captionLineHeight = in[CHAT_METRIC_CAPTION_LINE_HEIGHT];
 
   sl::RowSizeSpec spec;
   if (!sl::assistantUserMessageSizeSpec(hasText, hasAttachments, bubble, spec)) {
     return JNI_FALSE;
   }
-  jdouble values[CHAT_OUT_SLOTS];
-  values[CHAT_OUT_INSET_WIDTH] = spec.insetWidth;
-  values[CHAT_OUT_INSET_HEIGHT] = spec.insetHeight;
-  values[CHAT_OUT_WIDTH_FRACTION] = spec.widthFraction;
-  env->SetDoubleArrayRegion(out, 0, CHAT_OUT_SLOTS, values);
+  writeSizeSpec(env, spec, out);
   return JNI_TRUE;
 }
 

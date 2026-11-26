@@ -24,7 +24,7 @@ import { boardColumnLayout } from '../board/boardWidths';
 import { moveBoardItem } from '../board/moveBoardItem';
 import type { BoardColumn } from '../board/types';
 import { getChatMessageSizeSpec } from '../chat/sizeSpec';
-import { groupContactsIntoSections } from '../contacts/contactSections';
+import { groupContactsIntoSections } from '../__fixtures__/contactSections';
 import { clampFraction } from '../controls/clampFraction';
 import { getSingleImageFrame } from '../feed/singleImageFrame';
 import { formatRelativeTime } from '../formatRelativeTime';

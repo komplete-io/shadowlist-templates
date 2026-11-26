@@ -22,11 +22,27 @@ target 'ShadowListExample' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
+  # Layout checks only: SHADOWRULER=1 pod install links ShadowRuler from the checkout next to
+  # this repository (SHADOWRULER_ROOT overrides it). react-native.config.js adds its module.
+  if ENV['SHADOWRULER'] == '1'
+    pod 'ShadowRuler', :path => ENV['SHADOWRULER_ROOT'] || File.join(__dir__, '../../../../shadowruler')
+  end
+
   post_install do |installer|
     react_native_post_install(
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
     )
+    # ShadowRuler refuses release builds unless allowed. The layout check runs on Release.
+    if ENV['SHADOWRULER'] == '1'
+      installer.pods_project.targets.each do |target|
+        next unless target.name == 'ShadowRulerReactNative'
+        target.build_configurations.each do |build_config|
+          conditions = build_config.build_settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] || '$(inherited)'
+          build_config.build_settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = "#{conditions} SHADOWRULER_ALLOW_RELEASE"
+        end
+      end
+    end
   end
 end

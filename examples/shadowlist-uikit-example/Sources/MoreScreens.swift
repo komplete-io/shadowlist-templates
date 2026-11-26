@@ -418,23 +418,24 @@ final class CollapsingScreen: PageScreen, ShadowListKitListViewDataSource {
 enum AutoDrag {
   static func run(list: UIScrollView, names: @escaping () -> [String]) {
     guard UserDefaults.standard.string(forKey: "SLAutoDrag") == "1", let list = list as? ShadowListKitListView else { return }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+    // One step a display frame, from the first frame that shows the rows.
+    Frames.when({ !list.visibleCells.isEmpty }) {
       let before = names().prefix(6)
       let start = list.rectForItem(at: 1)
       var point = CGPoint(x: start.midX, y: start.midY)
       list.shadowListKit_beginDrag(at: point)
       var step = 0
-      Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { timer in
+      Frames.when({
         step += 1
         point.y += start.height * 4.2 / 30
         list.shadowListKit_moveDrag(to: point)
-        if step == 30 {
-          timer.invalidate()
-          list.shadowListKit_endDrag()
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            print("[SLAUTODRAG] before=\(Array(before)) after=\(Array(names().prefix(6)))")
-            fflush(stdout)
-          }
+        return step == 30
+      }) {
+        list.shadowListKit_endDrag()
+        // The order is read once the drop animation settled.
+        Frames.when({ Frames.settled(list) }) {
+          print("[SLAUTODRAG] before=\(Array(before)) after=\(Array(names().prefix(6)))")
+          fflush(stdout)
         }
       }
     }

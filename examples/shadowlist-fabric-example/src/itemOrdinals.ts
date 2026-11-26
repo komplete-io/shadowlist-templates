@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef } from 'react';
 
 /*
- * Stable position labels for rows, like first item or second item.
+ * Stable position labels for rows, like item 1 or item 2.
  * A row's number is given once, when it first appears, and kept by id rather than by index.
  * Loading chat history shifts every index, and labels based on the index would renumber and
  * re-render every mounted row at once.
@@ -28,110 +28,11 @@ interface ItemOrdinals {
 }
 
 /*
- * Positions are spelled out in full, like five hundred thirty ninth item. Intl can only pick
- * the suffix category and has no spell-out mode. The few English rules live here behind a cache.
- */
-const ONES = [
-  'zero',
-  'one',
-  'two',
-  'three',
-  'four',
-  'five',
-  'six',
-  'seven',
-  'eight',
-  'nine',
-  'ten',
-  'eleven',
-  'twelve',
-  'thirteen',
-  'fourteen',
-  'fifteen',
-  'sixteen',
-  'seventeen',
-  'eighteen',
-  'nineteen',
-];
-
-const TENS = [
-  '',
-  '',
-  'twenty',
-  'thirty',
-  'forty',
-  'fifty',
-  'sixty',
-  'seventy',
-  'eighty',
-  'ninety',
-];
-
-const SCALES: ReadonlyArray<readonly [number, string]> = [
-  [1000000000, 'billion'],
-  [1000000, 'million'],
-  [1000, 'thousand'],
-  [100, 'hundred'],
-];
-
-/*
- * The words for a number, for example 539 gives five hundred thirty nine.
- */
-function cardinalWords(value: number): string[] {
-  if (value < 20) return [ONES[value] ?? String(value)];
-
-  for (const [scale, name] of SCALES) {
-    if (value >= scale) {
-      const words = [...cardinalWords(Math.floor(value / scale)), name];
-      const remainder = value % scale;
-      return remainder === 0 ? words : [...words, ...cardinalWords(remainder)];
-    }
-  }
-
-  const tens = TENS[Math.floor(value / 10)] ?? '';
-  const ones = value % 10;
-  return ones === 0 ? [tens] : [tens, ONES[ones]!];
-}
-
-const ORDINAL_IRREGULARS: Record<string, string> = {
-  one: 'first',
-  two: 'second',
-  three: 'third',
-  five: 'fifth',
-  eight: 'eighth',
-  nine: 'ninth',
-  twelve: 'twelfth',
-};
-
-/*
- * Turns twenty into twentieth, nine into ninth and hundred into hundredth.
- */
-function toOrdinalWord(word: string): string {
-  const irregular = ORDINAL_IRREGULARS[word];
-  if (irregular !== undefined) return irregular;
-  if (word.endsWith('y')) return `${word.slice(0, -1)}ieth`;
-  return `${word}th`;
-}
-
-const labelCache = new Map<string, string>();
-
-/*
- * The spelled out label for a position, like first item or five hundred thirty ninth item.
- * Rows numbered away from the start read prepended: first item.
+ * The label for a position, like item 539. Rows numbered away from the start read
+ * prepended: item 539.
  */
 function formatOrdinalLabel(value: number, prepended = false): string {
-  const key = `${prepended ? 'p' : 'f'}${value}`;
-  const cached = labelCache.get(key);
-  if (cached !== undefined) return cached;
-
-  const words = cardinalWords(value);
-  const ordinal = [
-    ...words.slice(0, -1),
-    toOrdinalWord(words[words.length - 1]!),
-  ].join(' ');
-  const label = prepended ? `prepended: ${ordinal} item` : `${ordinal} item`;
-  labelCache.set(key, label);
-  return label;
+  return prepended ? `prepended: item ${value}` : `item ${value}`;
 }
 
 /*

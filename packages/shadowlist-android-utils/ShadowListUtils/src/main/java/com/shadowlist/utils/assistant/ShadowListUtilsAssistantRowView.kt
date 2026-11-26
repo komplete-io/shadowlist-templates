@@ -43,6 +43,7 @@ internal class ShadowListUtilsAssistantRowView(context: Context) : ShadowListUti
         view.onFeedback = assistant.handlers.onFeedback
         view.onFollowUp = assistant.handlers.onFollowUp
         view.onOpenLink = assistant.handlers.onOpenLink
+        view.onMarkdownHeightChange = { assistant.onMarkdownHeightChange(assistant.key) }
         view.onLayoutChange = { assistant.onExpansionChange(assistant.key, view.thinkingExpanded, view.expandedToolKeys) }
       }
       is ShadowListUtilsAssistantMessage.End -> { content?.let(::removeView); content = null }
@@ -64,6 +65,7 @@ internal class ShadowListUtilsAssistantRowView(context: Context) : ShadowListUti
   override fun prepareForReuse() {
     (content as? ShadowListUtilsAssistantUserMessage)?.onLayoutChange = null
     (content as? ShadowListUtilsAssistantReplyMessage)?.onLayoutChange = null
+    (content as? ShadowListUtilsAssistantReplyMessage)?.onMarkdownHeightChange = null
     super.prepareForReuse()
   }
 }

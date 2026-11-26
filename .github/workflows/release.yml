@@ -72,10 +72,13 @@ jobs:
           -destination 'generic/platform=iOS'
           CODE_SIGNING_ALLOWED=NO build
 
-      - name: Lint the podspec
+      - name: Lint the podspecs
         env:
           SHADOWLIST_ROOT: ${{ github.workspace }}/shadowlist
-        run: pod lib lint ShadowListUtils.podspec --allow-warnings --include-podspecs=../shadowlist/ShadowListKit.podspec
+        run: |
+          pod lib lint EnrichedMarkdownCppShim.podspec --allow-warnings
+          pod lib lint EnrichedMarkdown.podspec --allow-warnings --include-podspecs=EnrichedMarkdownCppShim.podspec
+          pod lib lint ShadowListUtils.podspec --allow-warnings --include-podspecs=../shadowlist/ShadowListKit.podspec,EnrichedMarkdownCppShim.podspec,EnrichedMarkdown.podspec
 
       # SHADOWLIST_ROOT stays unset here. When set, the podspec bakes the local engine path into the published spec.
       - name: Push to CocoaPods trunk
@@ -85,6 +88,8 @@ jobs:
             exit 0
           fi
           unset SHADOWLIST_ROOT
+          pod trunk push EnrichedMarkdownCppShim.podspec --allow-warnings --synchronous
+          pod trunk push EnrichedMarkdown.podspec --allow-warnings --synchronous
           pod trunk push ShadowListUtils.podspec --allow-warnings --synchronous
 
   android:
@@ -125,7 +130,7 @@ jobs:
       - name: Build ShadowListUtils
         run: ./gradlew --no-daemon --console=plain :ShadowListUtils:assembleRelease
 
-      # The POM depends on the kit by its Maven coordinates. The engine repository publishes the kit.
+      # Publish the parser and UI before their consumer, all at VERSION_NAME. The engine publishes the kit.
       - name: Publish to Maven Central
         run: |
           if [ -z "$MAVEN_CENTRAL_USERNAME" ] || [ -z "$MAVEN_CENTRAL_PASSWORD" ] || [ -z "$SIGNING_KEY" ]; then
@@ -137,4 +142,6 @@ jobs:
           export ORG_GRADLE_PROJECT_signingInMemoryKey="$SIGNING_KEY"
           if [ -n "$SIGNING_KEY_ID" ]; then export ORG_GRADLE_PROJECT_signingInMemoryKeyId="$SIGNING_KEY_ID"; fi
           if [ -n "$SIGNING_KEY_PASSWORD" ]; then export ORG_GRADLE_PROJECT_signingInMemoryKeyPassword="$SIGNING_KEY_PASSWORD"; fi
+          ./gradlew --no-daemon --console=plain :enriched-markdown-android:parser:publishAndReleaseToMavenCentral
+          ./gradlew --no-daemon --console=plain :enriched-markdown-android:ui:publishAndReleaseToMavenCentral
           ./gradlew --no-daemon --console=plain :ShadowListUtils:publishAndReleaseToMavenCentral

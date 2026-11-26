@@ -40,7 +40,7 @@ it. The Podfile.lock files record the pod path of `../shadowlist` as well.
 
 ## Development
 
-`make` at the repo root runs every task. A JS target passes through to the `yarn` script of the same name, with `-`
+`make` at the repo root runs `install` by default. A JS target passes through to the `yarn` script of the same name, with `-`
 for `:` (`make format-check` runs `yarn format:check`).
 
 | Command | What it does |
@@ -52,7 +52,7 @@ for `:` (`make format-check` runs `yarn format:check`).
 | `make test` | Jest for `shadowlist-utils` |
 | `make test-wasm` | Node tests for `shadowlist-wasm-utils` against its `dist/` |
 | `make test-core` | Builds `packages/shadowlist-utils-core-tests` with CMake and runs it with ctest |
-| `make test-core-tsan` | The same tests under ThreadSanitizer, without the fuzz tests |
+| `make test-core-tsan` | The same tests under ThreadSanitizer |
 | `make build` | Builds `shadowlist-utils` with bob |
 | `make build-wasm` | Builds `shadowlist-wasm-utils` with Emscripten and TypeScript |
 | `make format` | Prettier over the repo. `make format-check` only checks. |

@@ -52,7 +52,7 @@ public final class ShadowListUtilsListFooter: UIView {
     let textWidth = width - 2 * theme.spacing.lg
     let layout = theme.typography.footnote.layout(text, width: textWidth, maxLines: 0, scaled: true, alignment: .natural)
     textView.show(layout, theme.colors.secondaryLabel)
-    textView.frame = CGRect(x: layout.lineCount > 1 ? theme.spacing.lg : (width - layout.size.width) / 2, y: theme.spacing.xl, width: layout.size.width, height: layout.size.height)
+    textView.frame = CGRect(x: layout.lineCount > 1 ? theme.spacing.lg : ShadowListUtilsPlatform.floorToPixel((width - layout.size.width) / 2), y: theme.spacing.xl, width: layout.size.width, height: layout.size.height)
     contentHeight = layout.size.height + 2 * theme.spacing.xl
   }
 }

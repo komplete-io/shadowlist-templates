@@ -3,8 +3,8 @@ package com.shadowlist.utils
 import android.content.Context
 
 /*
- * The model of what one cell shows. Its layout is a pure function of the row and a width, safe
- * to compute off the UI thread, and its view only copies the frames the layout holds.
+ * The model of what one cell shows. Its layout is safe to compute off the UI thread and
+ * supplies the frames its view uses.
  */
 interface ShadowListUtilsRow {
   /*

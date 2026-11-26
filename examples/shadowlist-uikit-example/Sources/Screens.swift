@@ -13,6 +13,11 @@ enum FakeNetwork {
   }()
 
   static func reply(_ work: @escaping () -> Void) {
+    // The delay is the latency the example pretends a server has. -SLLatency 0,0 turns it off.
+    if latency.upperBound <= 0 {
+      DispatchQueue.main.async(execute: work)
+      return
+    }
     DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: latency) / 1000, execute: work)
   }
 }
@@ -271,10 +276,10 @@ final class ChatScreen: ListScreen {
   private func item(_ message: ChatMessage, prepended: Bool = false) -> ShadowListUtilsChatMessage {
     if Settings.debug {
       if prepended {
-        captions[message.id] = "prepended: " + Ordinals.label(nextPrepended)
+        captions[message.id] = "prepended: item \(nextPrepended)"
         nextPrepended += 1
       } else {
-        captions[message.id] = Ordinals.label(nextForward)
+        captions[message.id] = "item \(nextForward)"
         nextForward += 1
       }
     }

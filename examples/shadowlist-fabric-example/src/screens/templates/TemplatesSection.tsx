@@ -34,12 +34,17 @@ const useStyles = createStyles(({ spacing, grouped }) =>
     section: {
       marginTop: spacing.xxl,
     },
+    /*
+     * Content lines up with the caption: grouped.inset plus grouped.rowInset from the edge, in
+     * a card or not, as a card's rows do.
+     */
     content: {
-      marginHorizontal: grouped.inset,
+      marginHorizontal: grouped.inset + grouped.rowInset,
       gap: spacing.md,
     },
     card: {
-      padding: spacing.md,
+      paddingHorizontal: grouped.rowInset,
+      paddingVertical: spacing.md,
       gap: spacing.md,
     },
   })

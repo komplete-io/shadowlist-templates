@@ -16,6 +16,13 @@ class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     LaunchSettings.capture(intent?.extras)
     super.onCreate(savedInstanceState)
+    // Layout checks: makes the external files folder ShadowRuler captures go to (SLRulerDir).
+    if (LaunchSettings.values["SLRuler"] == "1") {
+      getExternalFilesDir(null)
+    }
+    if (LaunchSettings.values["SLRoute"] == "Bench") {
+      BenchMonitor(this, anchors = LaunchSettings.values["SLOps"] == "1").start()
+    }
   }
 
   override fun createReactActivityDelegate(): ReactActivityDelegate =

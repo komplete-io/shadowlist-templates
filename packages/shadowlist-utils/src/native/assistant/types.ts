@@ -114,6 +114,7 @@ export type AssistantMessage =
   AssistantPrompt | AssistantReply | AssistantEndMarker;
 
 export interface AssistantSuggestion {
+  description?: string;
   title: string;
   prompt: string;
 }

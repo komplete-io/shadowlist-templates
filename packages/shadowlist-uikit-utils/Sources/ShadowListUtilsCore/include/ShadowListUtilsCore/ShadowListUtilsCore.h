@@ -2,7 +2,6 @@
 
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
-#import "ShadowListUtilsMarkdownBlock.h"
 #import "ShadowListUtilsAssistantStep.h"
 #import "ShadowListUtilsWrapLayout.h"
 
@@ -179,14 +178,13 @@ NS_SWIFT_SENDABLE
   NS_SWIFT_NAME(boardMovePlan(columns:itemKey:destinationColumn:destinationKey:destinationIndex:));
 
 /*
- * The existing shared Markdown grammar and link policy. Parser results are typed copies.
+ * The assistant size spec, step order and link policy.
  */
 + (BOOL)assistantUserMessageSizeSpec:(ShadowListUtilsChatSizeSpec *)spec
                            hasText:(BOOL)hasText
                     hasAttachments:(BOOL)hasAttachments
                            metrics:(ShadowListUtilsChatMetrics)metrics;
 + (NSArray<ShadowListUtilsAssistantStep *> *)stepsOf:(NSString *)content positions:(NSArray<NSNumber *> *)positions NS_SWIFT_NAME(stepsOf(_:positions:));
-+ (NSArray<ShadowListUtilsMarkdownBlock *> *)parseMarkdown:(NSString *)source;
 + (BOOL)isSafeUrl:(NSString *)url;
 + (NSString *)trim:(NSString *)text;
 

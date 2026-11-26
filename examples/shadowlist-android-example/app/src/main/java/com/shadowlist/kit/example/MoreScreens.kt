@@ -7,6 +7,7 @@ import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -256,27 +257,37 @@ class TouchScript(private val view: View) {
   }
 
   /*
-   * Run step for each of count frames, about 16 ms apart, then done.
+   * Run step on each of the next count display frames, then done.
    */
   fun frames(count: Int, step: (Int) -> Unit, done: () -> Unit) {
     var frame = 0
-    val tick = object : Runnable {
-      override fun run() {
+    Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+      override fun doFrame(frameTimeNanos: Long) {
         step(frame++)
-        if (frame < count) handler.postDelayed(this, 16) else done()
+        if (frame < count) Choreographer.getInstance().postFrameCallback(this) else done()
       }
-    }
-    handler.postDelayed(tick, 16)
+    })
   }
 
+  /*
+   * Run work after millis, for a finger that rests on the screen that long.
+   */
   fun after(millis: Long, work: () -> Unit) {
     handler.postDelayed(work, millis)
   }
+
+  /*
+   * Run work once the view's rows hold still, with until true.
+   */
+  fun settled(work: () -> Unit) = settled(view, work)
+
+  fun settled(until: () -> Boolean, work: () -> Unit) = settled(view, until, work)
 }
 
 private fun report(tag: String, result: JSONObject, exit: Boolean) {
   Log.i(tag, result.toString())
-  if (exit) Handler(Looper.getMainLooper()).postDelayed({ Process.killProcess(Process.myPid()) }, 300)
+  // Log writes reach logd before it returns.
+  if (exit) Handler(Looper.getMainLooper()).post { Process.killProcess(Process.myPid()) }
 }
 
 /*
@@ -288,9 +299,9 @@ object AutoDrag {
   fun runIfRequested(list: ShadowListKitListView, columns: Int, names: () -> List<String>) {
     if (LaunchArgs.get("SLAutoDrag") != "1") return
     val script = TouchScript(list)
-    script.after(1500) {
+    script.settled {
       val before = names()
-      val start = list.rectForItem(1) ?: return@after
+      val start = list.rectForItem(1) ?: return@settled
       val x = start.centerX() + list.paddingLeft - list.scrollX
       val y = start.centerY() + list.paddingTop - list.scrollY
       val dx = if (columns > 1) start.width() else 0f
@@ -302,7 +313,7 @@ object AutoDrag {
           script.move(x + dx * progress, y + dy * progress)
         }) {
           script.up(x + dx, y + dy)
-          script.after(600) {
+          script.settled {
             report("SLAUTODRAG", JSONObject().put("before", JSONArray(before)).put("after", JSONArray(names()))
               .put("moved", before != names()), LaunchArgs.get("SLBenchExit") == "1")
           }
@@ -318,22 +329,9 @@ object AutoDrag {
  * was from the nearest card edge.
  */
 object AutoFling {
-  /*
-   * How long the list goes without a scroll event before a fling counts as ended.
-   */
-  private const val SCROLL_IDLE_MS = 250L
-
   fun runIfRequested(list: ShadowListUtilsList) {
     if (LaunchArgs.get("SLScenario") != "snap") return
     val script = TouchScript(list)
-    val handler = Handler(Looper.getMainLooper())
-    var onEndScrolling: (() -> Unit)? = null
-    val ended = Runnable { onEndScrolling?.invoke() }
-    // The template list owns its delegate. Its scroll events going quiet mark the end of a fling.
-    list.onScroll = {
-      handler.removeCallbacks(ended)
-      handler.postDelayed(ended, SCROLL_IDLE_MS)
-    }
     val rests = JSONArray()
     var worst = 0f
     val directions = listOf(1, 1, -1)
@@ -346,22 +344,19 @@ object AutoFling {
       val direction = directions[round]
       val x = list.width / 2f
       val y = if (direction > 0) list.height * 0.75f else list.height * 0.25f
-      onEndScrolling = {
-        onEndScrolling = null
-        // The pass after the fling ends places the last rows. Judge the rest a frame later.
-        script.after(100) {
-          val distance = edgeDistance(list)
-          worst = maxOf(worst, distance)
-          rests.put(JSONObject().put("offset", list.scrollY).put("edgeDistance", distance))
-          script.after(300) { fling(round + 1) }
-        }
-      }
       script.down(x, y)
       script.frames(6, { frame -> script.move(x, y - direction * 70.dpf * (frame + 1)) }) {
         script.up(x, y - direction * 70.dpf * 6)
+        // The fling and its snap ended once the rows hold still.
+        settled(list) {
+          val distance = edgeDistance(list)
+          worst = maxOf(worst, distance)
+          rests.put(JSONObject().put("offset", list.scrollY).put("edgeDistance", distance))
+          fling(round + 1)
+        }
       }
     }
-    script.after(1500) { fling(0) }
+    settled(list) { fling(0) }
   }
 
   /*
@@ -387,7 +382,7 @@ object HorizontalCheck {
   fun runIfRequested(list: ShadowListKitListView, items: List<StripItem>) {
     if (LaunchArgs.get("SLScenario") != "horizontal") return
     val script = TouchScript(list)
-    script.after(1500) {
+    script.settled {
       var gaps = 0
       var uncovered = 0
       var steps = 0
@@ -404,7 +399,7 @@ object HorizontalCheck {
       val expected = items.sumOf { it.width() }
       val target = items.size * 2 / 3
       list.scrollToItem(target, 0.0)
-      script.after(300) {
+      script.settled {
         val landed = list.rectForItem(target)?.left?.minus(list.scrollX) ?: Float.NaN
         report("SLSCENARIO", JSONObject().put("scenario", "horizontal").put("steps", steps).put("gaps", gaps)
           .put("stickyUncovered", uncovered).put("contentWidth", list.contentSize)
@@ -462,7 +457,7 @@ class ChangesScreen(context: Context, engine: Engine) : Screen {
     rows.list.animatesChanges = true
     items.addAll(travellerRows(view.context, 80))
     rows.setRows(items)
-    if (LaunchArgs.get("SLScenario") == "animate") TouchScript(rows.list).after(1500) { runCheck() }
+    if (LaunchArgs.get("SLScenario") == "animate") TouchScript(rows.list).settled { runCheck() }
   }
 
   override fun headerMenu() = listOf(listOf(HeaderAction("Change Travellers", onPress = ::change)))
@@ -488,12 +483,12 @@ class ChangesScreen(context: Context, engine: Engine) : Screen {
     list.measure(View.MeasureSpec.makeMeasureSpec(list.width, View.MeasureSpec.EXACTLY),
       View.MeasureSpec.makeMeasureSpec(list.height, View.MeasureSpec.EXACTLY))
     list.layout(list.left, list.top, list.right, list.bottom)
-    script.after(60) {
+    afterFrames(4) {
       val during = JSONObject()
         .put("insertedAlpha", list.cellForItem(4)?.alpha ?: -1f)
         .put("survivorTranslationY", list.cellForItem(7)?.translationY ?: 0f)
         .put("fadingCells", fadingCells(list, removedKey))
-      script.after(700) {
+      script.settled {
         val settled = list.visibleCells.all { it.alpha == 1f && it.translationY == 0f }
         val topAfter = list.cellForItem(0)?.let { it.top - list.scrollY } ?: -1
         report("SLSCENARIO", JSONObject().put("scenario", "animate").put("during", during).put("settled", settled)
@@ -568,13 +563,13 @@ class CollapsingScreen(context: Context, engine: Engine) : Screen {
       script.down(x, y)
       // Slow enough for no fling: the moves alone must collapse and expand the bar.
       script.frames(40, { frame -> script.move(x, y + distance * (frame + 1) / 40) }) {
-        script.after(200) {
+        afterFrames(12) {
           script.up(x, y + distance)
-          script.after(400) { done() }
+          script.settled { done() }
         }
       }
     }
-    script.after(1500) {
+    script.settled {
       drag(-500.dpf) {
         result.put("barTopAfterUp", bar.top).put("listOffsetAfterUp", list.scrollY)
         drag(500.dpf) {
@@ -601,7 +596,7 @@ object AccessibilityCheck {
   fun runIfRequested(list: ShadowListKitListView) {
     if (LaunchArgs.get("SLScenario") != "a11y") return
     val script = TouchScript(list)
-    script.after(1500) {
+    script.settled {
       val node = list.createAccessibilityNodeInfo()
       val actions = node.actionList.map { it.id }
       val result = JSONObject().put("scenario", "a11y")
@@ -620,7 +615,7 @@ object AccessibilityCheck {
         putInt(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_COLUMN_INT, 0)
       }
       list.performAccessibilityAction(android.R.id.accessibilityActionScrollToPosition, arguments)
-      script.after(300) {
+      script.settled {
         val cell = list.cellForItem(target)
         val item = cell?.createAccessibilityNodeInfo()?.collectionItemInfo
         result.put("positionVisible", list.visibleRange?.contains(target) == true)

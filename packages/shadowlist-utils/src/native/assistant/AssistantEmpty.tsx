@@ -43,22 +43,23 @@ export const AssistantEmpty = memo(
         ) : null}
 
         {suggestions && suggestions.length > 0 ? (
-          <View style={styles.grid}>
-            {suggestions.map((suggestion) => (
+          <View style={styles.rows}>
+            {suggestions.map((suggestion, index) => (
               <Pressable
                 key={suggestion.prompt}
                 onPress={() => onSelectSuggestion?.(suggestion)}
                 accessibilityRole="button"
                 accessibilityLabel={suggestion.title}
-                accessibilityHint={suggestion.prompt}
+                accessibilityHint={suggestion.description ?? suggestion.prompt}
                 style={({ pressed }) => [
-                  styles.card,
+                  styles.row,
+                  index > 0 && styles.separator,
                   pressed && styles.cardPressed,
                 ]}
               >
                 <Text style={styles.cardTitle}>{suggestion.title}</Text>
                 <Text style={styles.cardPrompt} numberOfLines={2}>
-                  {suggestion.prompt}
+                  {suggestion.description ?? suggestion.prompt}
                 </Text>
               </Pressable>
             ))}
@@ -74,12 +75,12 @@ const useStyles = createStyles((theme) =>
     container: {
       alignItems: 'center',
       paddingHorizontal: theme.spacing.lg,
-      paddingTop: 48,
+      paddingTop: theme.spacing.xxl,
       paddingBottom: theme.spacing.xxl,
     },
     mark: {
-      width: 56,
-      height: 56,
+      width: theme.tapTarget + theme.spacing.md,
+      height: theme.tapTarget + theme.spacing.md,
       borderRadius: theme.radius.pill,
       backgroundColor: theme.colors.accent,
       alignItems: 'center',
@@ -97,18 +98,21 @@ const useStyles = createStyles((theme) =>
       textAlign: 'center',
       marginTop: theme.spacing.xs,
     },
-    grid: {
+    rows: {
       alignSelf: 'stretch',
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: theme.spacing.sm,
+      borderRadius: theme.grouped.radius,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.elevated,
       marginTop: theme.spacing.xxl,
     },
-    card: {
-      flexGrow: 1,
-      flexBasis: '46%',
-      padding: theme.spacing.md,
-      borderRadius: theme.radius.md,
+    separator: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.separator,
+    },
+    row: {
+      minHeight: theme.grouped.rowHeight,
+      paddingHorizontal: theme.grouped.rowInset,
+      paddingVertical: theme.spacing.md,
       backgroundColor: theme.colors.elevated,
     },
     cardPressed: {

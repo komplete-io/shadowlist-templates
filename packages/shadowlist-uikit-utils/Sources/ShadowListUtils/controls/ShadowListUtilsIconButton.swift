@@ -27,7 +27,9 @@ public final class ShadowListUtilsIconButton: UIControl {
     let intrinsic = icon.intrinsicContentSize
     let width = max(0, intrinsic.width >= 0 ? intrinsic.width : icon.bounds.width)
     let height = max(0, intrinsic.height >= 0 ? intrinsic.height : icon.bounds.height)
-    icon.frame = CGRect(x: (bounds.width - width) / 2, y: (bounds.height - height) / 2, width: width, height: height)
+    icon.frame = CGRect(
+      x: ShadowListUtilsPlatform.floorToPixel((bounds.width - width) / 2), y: ShadowListUtilsPlatform.floorToPixel((bounds.height - height) / 2),
+      width: width, height: height)
   }
   private func installIcon() { addSubview(icon); setNeedsLayout() }
 }

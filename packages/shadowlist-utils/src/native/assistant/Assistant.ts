@@ -1,3 +1,4 @@
+import { AssistantConversation } from './AssistantConversation';
 import { AssistantActionButton } from './AssistantActionButton';
 import { AssistantList } from './AssistantList';
 import { AssistantReplyMessage } from './AssistantReplyMessage';
@@ -12,6 +13,7 @@ import { AssistantAttachmentChip } from './AssistantAttachmentChip';
 import { AssistantTypingIndicator } from './AssistantTypingIndicator';
 
 export const Assistant = {
+  Conversation: AssistantConversation,
   List: AssistantList,
   ReplyMessage: AssistantReplyMessage,
   UserMessage: AssistantUserMessage,

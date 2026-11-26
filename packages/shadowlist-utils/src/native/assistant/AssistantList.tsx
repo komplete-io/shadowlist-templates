@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useMemo } from 'react';
+import { forwardRef, useCallback, useMemo, type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import {
   ShadowList,
@@ -15,7 +15,7 @@ import {
 } from './AssistantReplyMessage';
 import { AssistantUserMessage } from './AssistantUserMessage';
 import { ASSISTANT_END_MARKER_HEIGHT } from './endMarker';
-import type { AssistantMessage } from './types';
+import type { AssistantMessage, AssistantReply } from './types';
 import { getUserMessageSizeSpec } from './userMessageSizeSpec';
 import type { AssistantStreamStore } from './stream';
 import { AssistantRowStateContext, type AssistantRowState } from './rowState';
@@ -39,6 +39,7 @@ export type AssistantListProps = Omit<
 > &
   ReplyHandlers & {
     renderItem?: ShadowListProps<AssistantMessage>['renderItem'];
+    renderReplyFooter?: (message: AssistantReply) => ReactNode;
     store: AssistantStreamStore;
     streaming?: boolean;
     onEdit?: (messageId: string) => void;
@@ -53,6 +54,7 @@ export const AssistantList = forwardRef<ShadowListCommands, AssistantListProps>(
   (
     {
       renderItem,
+      renderReplyFooter,
       store,
       streaming = false,
       onCopy,
@@ -127,20 +129,23 @@ export const AssistantList = forwardRef<ShadowListCommands, AssistantListProps>(
             );
           case 'assistant':
             return (
-              <AssistantReplyMessage
-                message={item}
-                store={store}
-                onCopy={onCopy}
-                onCopyCode={onCopyCode}
-                onShare={onShare}
-                onRegenerate={onRegenerate}
-                onRetry={onRetry}
-                onSelectVariant={onSelectVariant}
-                onFeedback={onFeedback}
-                onFollowUp={onFollowUp}
-                onOpenLink={onOpenLink}
-                labels={l}
-              />
+              <View>
+                <AssistantReplyMessage
+                  message={item}
+                  store={store}
+                  onCopy={onCopy}
+                  onCopyCode={onCopyCode}
+                  onShare={onShare}
+                  onRegenerate={onRegenerate}
+                  onRetry={onRetry}
+                  onSelectVariant={onSelectVariant}
+                  onFeedback={onFeedback}
+                  onFollowUp={onFollowUp}
+                  onOpenLink={onOpenLink}
+                  labels={l}
+                />
+                {renderReplyFooter?.(item)}
+              </View>
             );
           default:
             return <View style={styles.endMarker} />;
@@ -148,6 +153,7 @@ export const AssistantList = forwardRef<ShadowListCommands, AssistantListProps>(
       },
       [
         store,
+        renderReplyFooter,
         onCopy,
         onCopyCode,
         onShare,

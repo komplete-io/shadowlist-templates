@@ -208,18 +208,25 @@ final class InboxScreen: UIViewController {
     show()
     installActions()
     FeatureScenario.startInbox(self)
-    // -SLSwipeDemo 1 opens the trailing actions of the second row, for screenshots.
+  }
+
+  private var demosShown = false
+
+  /*
+   * The demos for screenshots start once the screen is on screen and its rows are laid out.
+   * -SLSwipeDemo 1 opens the trailing actions of the second row. -SLSelectDemo 1 starts editing
+   * with the second and third rows selected.
+   */
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    guard !demosShown else { return }
+    demosShown = true
+    list.layoutIfNeeded()
     if UserDefaults.standard.string(forKey: "SLSwipeDemo") == "1" {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-        self?.list.shadowListKit_swipeItem(at: 1, distance: -170, velocity: 0)
-      }
+      list.shadowListKit_swipeItem(at: 1, distance: -170, velocity: 0)
     }
-    // -SLSelectDemo 1 starts editing with the second and third rows selected, for screenshots.
     if UserDefaults.standard.string(forKey: "SLSelectDemo") == "1" {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-        guard let self else { return }
-        self.selectionChanged(Set(self.messages[1...2].map(\.key)))
-      }
+      selectionChanged(Set(messages[1...2].map(\.key)))
     }
   }
 
@@ -309,7 +316,7 @@ final class InboxScreen: UIViewController {
 
   private func refresh() {
     refreshes += 1
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+    FakeNetwork.reply { [weak self] in
       self?.addNewMail(3)
       self?.list.isRefreshing = false
     }
@@ -326,7 +333,14 @@ enum FeatureScenario {
   static func startSections(_ screen: SectionsScreen) {
     guard UserDefaults.standard.string(forKey: "SLScenario") == "sections" else { return }
     let list = screen.list
-    after(1.5) {
+    Frames.when({ !list.visibleCells.isEmpty }) {
+      Frames.after(frames: 2) { checkSections(screen) }
+    }
+  }
+
+  private static func checkSections(_ screen: SectionsScreen) {
+    let list = screen.list
+    do {
       var result: [String: Any] = ["scenario": "sections"]
       result["numberOfSections"] = list.numberOfSections
       let third = list.firstItemIndexInSection(3)
@@ -364,7 +378,7 @@ enum FeatureScenario {
   static func startInbox(_ screen: InboxScreen) {
     guard UserDefaults.standard.string(forKey: "SLScenario") == "features" else { return }
     let list = screen.list
-    after(1.5) {
+    Frames.when({ !list.visibleCells.isEmpty }) {
       var result: [String: Any] = ["scenario": "features"]
       let animator = CountingAnimator()
       list.itemAnimator = animator
@@ -394,7 +408,13 @@ enum FeatureScenario {
       let count = screen.messages.count
       let swiped = screen.messages[2].key
       list.shadowListKit_swipeItem(at: 2, distance: -list.bounds.width, velocity: 0)
-      after(0.6) {
+      // The delete runs when the swipe's animation ends. The result reads the rows once the
+      // shown cells settled, two frames on at the least.
+      var frames = 0
+      Frames.when({
+        frames += 1
+        return frames > 2 && Frames.settled(list)
+      }) {
         list.layoutIfNeeded()
         result["fullSwipeDeleted"] = screen.messages.count == count - 1 && !screen.messages.contains { $0.key == swiped }
         // A partial swipe opens the row. Closing it puts it back.
@@ -467,9 +487,6 @@ enum FeatureScenario {
     }
   }
 
-  private static func after(_ seconds: Double, _ work: @escaping () -> Void) {
-    DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
-  }
 }
 
 /*

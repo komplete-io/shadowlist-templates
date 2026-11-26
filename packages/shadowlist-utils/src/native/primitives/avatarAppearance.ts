@@ -13,7 +13,7 @@ function isLowSurrogate(unit: number): boolean {
 /*
  * A stable hash over the name's UTF-16 units. A name keeps its color across sessions and list
  * positions. Half a surrogate pair hashes as U+FFFD, which is what it turns into on its way
- * through UTF-8 on the other platforms. avatarColorIndex in the core's utils/Avatar.hpp is the
+ * through UTF-8 on the other platforms. avatarColorIndex in shadowlist-utils-core/Avatar.hpp is the
  * same rule, and vectors.test holds them equal.
  */
 export function getAvatarColor(
@@ -58,7 +58,7 @@ export function getInitials(name: string): string {
 
 /*
  * The font size of the initials in an avatar of size, a whole number. avatarInitialsMetrics in
- * the core's utils/Avatar.hpp is the same rule, and vectors.test holds them equal.
+ * shadowlist-utils-core/Avatar.hpp is the same rule, and vectors.test holds them equal.
  */
 export function getInitialsFontSize(size: number): number {
   return Math.floor(size * 0.43);

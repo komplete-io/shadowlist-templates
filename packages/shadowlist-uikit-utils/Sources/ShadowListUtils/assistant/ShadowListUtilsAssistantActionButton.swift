@@ -40,7 +40,7 @@ public final class ShadowListUtilsAssistantActionButton: UIButton {
     configuration.imagePadding = theme.spacing.xs
     configuration.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: showLabel ? 10 : 0, bottom: 0, trailing: showLabel ? 10 : 0)
     configuration.background.backgroundColor = showLabel ? theme.colors.elevated : .clear
-    configuration.background.cornerRadius = theme.radius.sm
+    configuration.background.cornerRadius = theme.radius.lg
     configuration.baseForegroundColor = theme.colors.label
     configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { [theme] attributes in
       var attributes = attributes

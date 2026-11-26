@@ -60,18 +60,7 @@ data class ShadowListUtilsChatBubble(
     if (showsAuthor) shape = shape or ShadowListUtilsCore.CHAT_SHAPE_SHOWS_AUTHOR
     if (shownCaption != null) shape = shape or ShadowListUtilsCore.CHAT_SHAPE_HAS_CAPTION
     if (failed) shape = shape or ShadowListUtilsCore.CHAT_SHAPE_FAILED
-    val metrics = DoubleArray(ShadowListUtilsCore.CHAT_METRIC_SLOTS)
-    val body = theme.typography.body
-    metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_XXS] = theme.spacing.xxs.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_XS] = theme.spacing.xs.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_SM] = theme.spacing.sm.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_MD] = theme.spacing.md.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_SPACING_LG] = theme.spacing.lg.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_BODY_FONT_SIZE] = body.fontSize.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_BODY_LINE_HEIGHT] = body.scaledLineHeightPx().toFloat().dp.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_BODY_LETTER_SPACING] = body.letterSpacing.toDouble()
-    metrics[ShadowListUtilsCore.CHAT_METRIC_CAPTION_LINE_HEIGHT] = theme.typography.caption.scaledLineHeightPx().toFloat().dp.toDouble()
-    ShadowListUtilsCore.chatMessageSizeSpec(shape, metrics, out)
+    ShadowListUtilsCore.chatMessageSizeSpec(shape, ShadowListUtilsCore.chatMetrics(theme), out)
   }
 
   override fun layout(widthPx: Int): ShadowListUtilsRowLayout {

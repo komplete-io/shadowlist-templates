@@ -11,9 +11,7 @@ import {
 const PULSE_MS = 600;
 
 /*
- * The native Animated driver sets opacity on the view directly. A Reanimated loop here
- * committed the whole tree every frame, and with the dot inside a list row every commit
- * ran the list's layout pass too.
+ * The native Animated driver sets opacity on the view directly.
  */
 function usePulseOpacity(delay = 0) {
   const progress = useRef(new Animated.Value(0)).current;

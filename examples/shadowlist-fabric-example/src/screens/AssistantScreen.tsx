@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Animated, Clipboard, Share } from 'react-native';
-import {
-  KeyboardView,
-  type ShadowListCommands,
-  type ViewToken,
-} from 'shadowlist';
+import { KeyboardView, type ShadowListCommands } from 'shadowlist';
 import { useListController } from 'shadowlist-utils';
 import {
   Assistant,
@@ -51,13 +47,14 @@ import {
  * The list data changes only when a reply starts and ends. Tokens go to a store that only the
  * streaming row reads. The list does no work per token. Tokens are batched into one flush
  * every STREAM_FLUSH_MS.
- * getItemSizeSpec sizes prompts exactly and returns null for replies. The streaming row is
- * always mounted. Its real size wins over any guess.
+ * getItemSizeSpec sizes plain text prompts exactly and returns null for replies and prompts
+ * with attachments. The streaming row is always mounted. Its real size wins over any guess.
  * Following the stream is native. At the bottom, the rows near the newest one are marked as not
  * anchorable. The core keeps the newest row pinned as it grows, with no scroll per flush.
  * A user scroll away from the bottom stops the pin at once. A drag is never fought. Once the
- * end marker stays off screen, the anchor marks are dropped, the text holds still while the reply
- * grows below, and the jump button shows. Coming back to the bottom resumes following.
+ * list reports it left its end (onAtEndChange, sent for a reader's scroll and never for growth),
+ * the anchor marks are dropped, the text holds still while the reply grows below, and the jump
+ * button shows. Coming back to the bottom resumes following.
  */
 
 const KEYBOARD_GAP = 8;
@@ -66,12 +63,6 @@ const KEYBOARD_GAP = 8;
  * can be on screen matter. A short tail is enough and keeps the list the core checks small.
  */
 const FOLLOW_ANCHOR_WINDOW = 30;
-/*
- * How long the end marker must stay off screen before following stops. Growth runs about a
- * flush ahead of the pin. A short gap is not the reader leaving. Scroll deltas are not used,
- * because content shrinking at the bottom moves the offset just like a small upward drag.
- */
-const DISENGAGE_MS = 400;
 /*
  * Not following: every row can anchor, the end marker too. As the last one it stops the core
  * from treating a tall reply as resting at the bottom. The visible text holds still.
@@ -150,7 +141,6 @@ export const AssistantScreen = () => {
   const [following, setFollowing] = useState(true);
   const followingRef = useRef(true);
   const atEndRef = useRef(true);
-  const disengageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /*
    * Set while a regenerate or retry streams into a reply that is not the newest. Emptying that
    * reply can bring the end marker on screen by itself, and following then would scroll the new
@@ -193,7 +183,6 @@ export const AssistantScreen = () => {
   useEffect(
     () => () => {
       streamRef.current?.stop();
-      if (disengageTimerRef.current) clearTimeout(disengageTimerRef.current);
     },
     []
   );
@@ -218,10 +207,6 @@ export const AssistantScreen = () => {
   }, [following, list.data]);
 
   const setFollowingNow = useCallback((next: boolean) => {
-    if (disengageTimerRef.current) {
-      clearTimeout(disengageTimerRef.current);
-      disengageTimerRef.current = null;
-    }
     if (followingRef.current === next) return;
     followingRef.current = next;
     setFollowing(next);
@@ -257,9 +242,7 @@ export const AssistantScreen = () => {
   );
 
   /*
-   * Only replaceFromId rewinds the conversation, and only the composer passes it. Reading the edit
-   * banner's id in here made every other sender, like a follow-up chip, delete everything after
-   * the prompt being edited.
+   * Only replaceFromId rewinds the conversation, and only the composer passes it.
    */
   const sendPrompt = useCallback(
     (
@@ -458,29 +441,20 @@ export const AssistantScreen = () => {
   );
 
   /*
-   * The end marker is 1pt at the very end. It is on screen only at the true bottom. Reaching
-   * it resumes following at once. Leaving stops following only after DISENGAGE_MS, since growth
-   * runs a flush ahead of the pin, and neither that nor content shrinking at the bottom should
-   * count as the reader leaving.
+   * The list says when it leaves its end because the reader scrolled away or a scroll command
+   * landed elsewhere, and when it is back. Growth at the bottom and content shrinking there
+   * never count, so no wait is needed to tell them from the reader leaving.
    */
-  const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken<AssistantMessage>[] }) => {
+  const handleAtEndChange = useCallback(
+    (atEnd: boolean) => {
       if (messagesRef.current.length === 0) return;
-      const endOnScreen = viewableItems.some(
-        (token) => token.item.role === 'end'
-      );
-      atEndRef.current = endOnScreen;
-
-      if (endOnScreen) {
+      atEndRef.current = atEnd;
+      if (atEnd) {
         // Not while an older reply is being rewritten, see rewritingOlderRef.
         if (!rewritingOlderRef.current) setFollowingNow(true);
         return;
       }
-      if (!followingRef.current || disengageTimerRef.current) return;
-      disengageTimerRef.current = setTimeout(() => {
-        disengageTimerRef.current = null;
-        if (!atEndRef.current) setFollowingNow(false);
-      }, DISENGAGE_MS);
+      setFollowingNow(false);
     },
     [setFollowingNow]
   );
@@ -547,7 +521,7 @@ export const AssistantScreen = () => {
             nonAnchorKeys={nonAnchorKeys}
             ListHeaderComponent={header}
             onStartReached={list.handleStartReached}
-            onViewableItemsChanged={handleViewableItemsChanged}
+            onAtEndChange={handleAtEndChange}
             onCopy={copyToClipboard}
             onCopyCode={copyToClipboard}
             onShare={handleShare}

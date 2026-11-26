@@ -118,7 +118,7 @@ final class AssistantListTests: XCTestCase {
     XCTAssertGreaterThan(layout(latest: true).size.height, layout(latest: false).size.height)
   }
 
-  func testBackgroundRowTypesettingDoesNotCallApplicationLabelFormatters() {
+  func testUIKitReplyMeasurementOptsOutOfBackgroundPrefetch() {
     let list = ShadowListUtilsAssistantList(theme: theme)
     var labels = ShadowListUtilsAssistantLabels()
     labels.thoughtFor = { _ in XCTAssertTrue(Thread.isMainThread); return "Thought" }
@@ -129,11 +129,33 @@ final class AssistantListTests: XCTestCase {
       toolCalls: [ShadowListUtilsAssistantToolCall(key: "tool", name: "Tool", input: "Input", status: .done(output: "Output"))], status: .done())
     list.items = [.assistant(ShadowListUtilsAssistantReply(key: "reply", variants: [turn])), .endMarker]
     let row = list.rows[0]
-    let finished = expectation(description: "background typesetting")
-    DispatchQueue.global().async {
-      XCTAssertGreaterThan(row.layout(width: 390).height, 1)
-      finished.fulfill()
-    }
-    wait(for: [finished], timeout: 2)
+    XCTAssertTrue(row is ShadowListUtilsMainThreadRow)
+    XCTAssertGreaterThan(row.layout(width: 390).height, 1)
+    // Prefetch must skip this row rather than constructing a UITextView on its worker queue.
+    list.layoutCache.prefetch(list.rows, width: 390)
+  }
+
+  func testAFailedReplyWithoutAnErrorReadsTheLocalizedFailure() {
+    let failed = ShadowListUtilsAssistantReply(key: "failed", variants: [ShadowListUtilsAssistantTurn(status: .failed(error: ""))])
+    let view = ShadowListUtilsAssistantReplyMessage(message: failed, theme: theme)
+    view.frame = CGRect(x: 0, y: 0, width: testWidth, height: 400)
+    view.layoutIfNeeded()
+    XCTAssertTrue(view.subviews.contains { $0.accessibilityLabel == view.labels.responseFailed })
+  }
+
+  func testAPreparedLayoutIsShownOnceAndAChangedValueLaysOutAgain() {
+    let view = ShadowListUtilsAssistantReplyMessage(message: reply, theme: theme)
+    let prepared = ShadowListUtilsAssistantReplyMessage.layout(message: reply, live: nil, width: testWidth, busy: false,
+      isLatest: false, thinkingExpanded: false, expandedToolKeys: [], hasFeedback: false, hasRetry: false, theme: theme,
+      labels: view.labels)
+    view.frame = CGRect(origin: .zero, size: prepared.size)
+    view.apply(prepared)
+    let shown = view.subviews
+    view.setNeedsLayout()
+    view.layoutIfNeeded()
+    XCTAssertTrue(view.subviews.elementsEqual(shown, by: ===))
+    view.busy = true
+    view.layoutIfNeeded()
+    XCTAssertFalse(view.subviews.elementsEqual(shown, by: ===))
   }
 }

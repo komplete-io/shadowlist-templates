@@ -6,7 +6,7 @@ type Step =
 
 /*
  * Splits the reply text where each tool call was made and puts the calls between the pieces.
- * A call with no saved position, from an older transcript, goes first. Blank pieces are
+ * A call with no saved position goes first. Blank pieces are
  * dropped, since the card already leaves a gap.
  *
  * Calls made back to back, with no text between them, are one step: they draw as one grouped

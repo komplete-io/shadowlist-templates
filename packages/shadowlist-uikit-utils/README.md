@@ -122,8 +122,8 @@ list.labels.failed = "Nicht zugestellt. Tippen zum Wiederholen."
 
 ### Rows
 
-A row is the model of what one cell shows. Its layout is a pure function of the row and a width, safe off the main
-thread, and its view only copies the frames the layout holds. The template lists build their rows from items. A
+A row is the model of what one cell shows. Its layout supplies the frames its view uses. Assistant rows require
+main-thread layout; other rows support background measurement. The template lists build their rows from items. A
 `ShadowListUtilsList` takes rows directly, of the library's or of the app's own.
 
 | API | Notes |
@@ -131,7 +131,7 @@ thread, and its view only copies the frames the layout holds. The template lists
 | `ShadowListUtilsRow` | `key`, `contentVersion`, `viewClass`, `reuseIdentifier`, `layout(width:)`. A new `contentVersion` under the same key configures the cell again. `reuseIdentifier` defaults to the name of `viewClass`. In a horizontal list `width` is the list's height, and the layout's `width` is the row's size along the list. |
 | `ShadowListUtilsRowLayout` | `width`, `height`. Subclasses add their row's frames. A layout never changes once made. |
 | `ShadowListUtilsRowView` | An open `ShadowListKitListCell`. `row`, `configure(_:layout:)`, and `fill(_:)` and `apply(_:layout:)` to override. Without a layout it lays itself out on the main thread. |
-| `ShadowListUtilsLayoutCache` | `layout(_:width:)`, `prefetch(_:width:around:)`, `invalidate(_:)`, `invalidateAll()`. `layout` is safe on any thread. |
+| `ShadowListUtilsLayoutCache` | `layout(_:width:)`, `prefetch(_:width:around:extent:)`, `invalidate(_:)`, `invalidateAll()`. `layout` requires the main thread for assistant rows. |
 | `ShadowListUtilsList` | `theme`, `rows`, `setRows(_:animated:)`, `onEndReached`, `onStartReached`, `onRefresh`, `onScroll`. Setting `onRefresh` turns pull to refresh on. Set the kit's `isRefreshing` back to false when done. |
 
 The layout of each of the library's rows holds a frame for every part of the row, in points, and the typeset text of
@@ -164,8 +164,6 @@ its text parts. A frame of a part the row lacks is empty.
 | `ShadowListUtilsSpinner(size:color:theme:)` | Centered activity indicator. |
 | `ShadowListUtilsRedactedText.bars(for:lineHeight:)` | One bar per line of a text layout that holds text, as wide as the line's text, for a placeholder row. |
 | `ShadowListUtilsEmptyState(title:message:icon:theme:)` | What a screen says before it has anything to show. |
-
-Every primitive view has a settable `theme`.
 
 ### Masonry
 
@@ -296,7 +294,7 @@ The package at the repo root takes ShadowListKit and the C++ core from the engin
 `SHADOWLIST_ROOT`, or a `shadowlist` folder next to this repository, before the engine's git release.
 `packages/shadowlist-uikit-utils/version.json` holds this library's version and the engine version it needs. The
 podspec reads both. `pod lib lint ShadowListUtils.podspec --allow-warnings
---include-podspecs=$SHADOWLIST_ROOT/ShadowListKit.podspec` from the repo root lints against the engine checkout and needs
+--include-podspecs=$SHADOWLIST_ROOT/ShadowListKit.podspec,EnrichedMarkdownCppShim.podspec,EnrichedMarkdown.podspec` from the repo root lints against the engine checkout and needs
 `SHADOWLIST_ROOT` set.
 
 ## Example app
@@ -354,12 +352,22 @@ stay in the application model; action callbacks request changes. A live turn ove
 The `.endMarker` message remains a one-point row excluded from anchoring. The list defaults to inverted layout,
 following appends and dismissing the keyboard on drag. `rowForItem` replaces a default transcript row.
 
-`ShadowListUtilsAssistantReplyMessage` renders shared Markdown parser output, interleaved tool calls, thinking,
+`ShadowListUtilsAssistantReplyMessage` renders vendored Enriched Markdown, interleaved tool calls, thinking,
 sources and follow-ups. Copy, share, regenerate, retry, variant selection, feedback, follow-up and link callbacks
 are available on the list and standalone reply. Thinking and tool disclosure stays keyed to the message across
-streaming updates. Row layouts capture immutable model and presentation snapshots before background measurement.
-The native bridges call the shared C++ Markdown grammar, URL policy and `stepsOf` text/tool ordering; positions
-remain UTF-16 indices. Custom link callbacks receive the original URL; the default opener filters unsafe URLs.
+streaming updates. The UIKit markdown document retains its text view and reuses upstream finished parse blocks;
+partial syntax uses upstream streaming repair. A single theme mapping supplies both drawing and fitting height.
+Assistant rows measure with UIKit/TextKit on the main thread and opt out of background prefetch. Loaded-image
+height changes invalidate the row cache. Other rows retain background measurement.
+The native bridges still supply the URL policy and `stepsOf` text/tool ordering; positions remain UTF-16 indices.
+Custom link callbacks receive the renderer's URL; the default opener filters unsafe URLs. Native text selection,
+code-copy controls and VoiceOver navigation come from upstream. Code copy also writes to the system pasteboard.
+
+The root Swift package exports `EnrichedMarkdown` (iOS 16 only) alongside the existing products. For CocoaPods,
+register `EnrichedMarkdown` and `EnrichedMarkdownCppShim` with `:path` pointing to this repository, alongside
+`ShadowListUtils`. The two new root podspecs version together with ShadowListUtils; no dependency download scripts
+are needed. LaTeX and syntax-highlighting products are omitted. See
+[UIKit provenance and AppKit port scope](../enriched-markdown-uikit/PROVENANCE.md) for local patches and limits.
 
 `ShadowListUtilsAssistantComposer` reuses the multiline chat input. `value` and `onChangeText` support controlled
 drafts; otherwise it owns the draft. `onSend` receives trimmed text and application-owned attachments and requests
@@ -396,7 +404,7 @@ respect the system animation preference.
 default footer. Its existing Poll `labels.totalVotes` formatter receives the application total.
 Custom or explicitly cleared PollList footers remain application-owned.
 
-The native `Components` example route uses all six views: suggestions update the screen's selected
+The native `Templates` example route uses all six views: suggestions update the screen's selected
 prompt, disclosures expand, Finish changes a running tool to done and increments the displayed vote
 total, and the scroll button returns to the first component. The composition and controlled-field
 examples below use the same route; these additions do not imply complete visual/API parity.
@@ -414,7 +422,7 @@ inserting separators. Compose `ShadowListUtilsGroupedSeparator(inset:)` explicit
 `ShadowListUtilsGroupedCaption(title:)` uses the theme's caption casing and heading accessibility.
 `ShadowListUtilsGroupedSection(title:children:)` composes a caption and card; nil or an empty title
 hides the caption. Child view identity is retained when the same children are supplied again.
-The Components route demonstrates Save/Remove callbacks updating a read-only account value.
+The Templates route demonstrates Save/Remove callbacks updating a read-only account value.
 
 ```swift
 let value = ShadowListUtilsFormValue(text: "3 saved routes")
@@ -453,7 +461,7 @@ label. Its native clear affordance remains available without focusing first.
 All four use the same native editing owner as ChatInput. Setting a controlled value is silent;
 user edits request `onChange`, and application values wait until native marked-text composition
 finishes. These wrappers add no uncontrolled mode, secure-entry prop or independent streaming
-state. The Components example owns controlled Route, Budget, Search and Notes values.
+state. The Templates example owns controlled Route, Budget, Search and Notes values.
 
 ### Action controls
 
@@ -478,7 +486,7 @@ the same highlight fallback on UIKit as RN does. PillButton and IconButton read 
 DashedButton and FormButton retain their own highlight behavior. The shared feedback helper
 uses native pressed state, without a second animation or gesture engine.
 
-Components uses matching light-theme data on both platforms: Continue disables itself, Add route
+Templates uses matching light-theme data on both platforms: Continue disables itself, Add route
 increments the badge and re-enables Continue, and More routes reports its application callback.
 The standalone scroll button is centered at its intended 36-point size.
 
@@ -501,7 +509,7 @@ change selection. No extra disabled, clear or variant props are introduced.
 shared C++ `wrapLayout`, using `theme.spacing.sm` between children and lines and the existing
 native RTL frame mirroring. Child identity and order remain application-owned.
 
-The Components route demonstrates toggling and removing Direct routes, clearing a compact
+The Templates route demonstrates toggling and removing Direct routes, clearing a compact
 monospaced seat preference without a primary press handler, and controlled Train/Flight choices.
 
 ### Progress and segmented choices
@@ -519,7 +527,7 @@ controlled `value`, and `onChange(id)`. A selected-option tap still invokes the 
 assigning `value` or replacing `options` never does. `size` is `.regular` by default (36 points,
 equal-width options) or `.compact` (34 points, natural widths). The optional inherited
 `accessibilityLabel` labels the group and selected options retain their full labels. Native
-frame/layout APIs take the place of RN's style prop. Components demonstrates repeated Book
+frame/layout APIs take the place of RN's style prop. Templates demonstrates repeated Book
 requests and application-owned progress updates.
 
 ### Grouped rows and native actions

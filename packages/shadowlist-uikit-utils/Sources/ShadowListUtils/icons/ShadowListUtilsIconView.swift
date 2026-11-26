@@ -4,7 +4,7 @@ import UIKit
  * The three icons the rows draw: the grip of a reorderable row, the chevron of a row that opens
  * something and the check of a selected row. Each fills its view, which is square.
  */
-final class ShadowListUtilsIconView: ShadowListUtilsView {
+final class ShadowListUtilsIconView: UIView {
   enum Kind {
     case grip
     case chevron
@@ -13,7 +13,7 @@ final class ShadowListUtilsIconView: ShadowListUtilsView {
 
   let kind: Kind
 
-  var color: ShadowListUtilsColor = .clear {
+  var color: UIColor = .clear {
     didSet { setNeedsDisplay() }
   }
 

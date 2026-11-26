@@ -329,15 +329,80 @@ class RowsTest {
   }
 
   @Test
-  fun the_cache_drops_the_layouts_of_keys_that_left_the_rows() = onMain {
+  fun the_cache_drops_the_layouts_of_keys_that_left_the_rows_once_it_grew() = onMain {
     val list = ShadowListUtilsList(testContext)
     host(list)
     list.setRows(rows(6))
     host(list)
     assertEquals(6, list.layoutCache.count)
-    list.setRows(rows(6).takeLast(2))
+    // One run deleted drops the layouts of that run.
+    list.setRows(rows(6).drop(1))
     host(list)
-    assertEquals(2, list.layoutCache.count)
+    assertEquals(5, list.layoutCache.count)
+    // After any other change a layout of a key that left costs memory only. The update reads no keys to drop it.
+    val kept = rows(6).let { listOf(it[5], it[3]) }
+    list.setRows(kept)
+    host(list)
+    assertEquals(5, list.layoutCache.count)
+    // The cache grew past its slack. The next update drops the layouts of the keys that left.
+    val grown = kept.reversed() + List(300) { CountingRow("more-$it") }
+    for (row in grown) list.layoutCache.layout(row, 100)
+    list.setRows(grown)
+    for (key in listOf("row-1", "row-2", "row-4")) assertFalse(list.layoutCache.has(key))
+    assertTrue(list.layoutCache.has("row-5"))
+  }
+
+  @Test
+  fun a_run_inserted_or_deleted_in_the_middle_keeps_the_other_rows_and_cells() = onMain {
+    val list = ShadowListUtilsList(testContext)
+    host(list)
+    val rows = rows(6).toMutableList<ShadowListUtilsRow>()
+    list.setRows(rows.toList())
+    host(list)
+    val after = list.cellForItem(3)
+    rows.addAll(3, listOf(CountingRow("new-0"), CountingRow("new-1")))
+    list.setRows(rows.toList())
+    host(list)
+    assertEquals(listOf("row-0", "row-1", "row-2", "new-0", "new-1", "row-3", "row-4", "row-5"), list.keys)
+    assertSame(after, list.cellForItem(5))
+    assertEquals((5 * 44f.px).toFloat(), list.rectForItem(5)!!.top, 1f)
+    rows.subList(1, 4).clear()
+    list.setRows(rows.toList())
+    host(list)
+    assertEquals(listOf("row-0", "new-1", "row-3", "row-4", "row-5"), list.keys)
+    assertSame(after, list.cellForItem(2))
+    assertEquals(
+      mapOf("row-0" to 1, "row-1" to 1, "row-2" to 1, "row-3" to 1, "row-4" to 1, "row-5" to 1, "new-0" to 1, "new-1" to 1),
+      CountingRowView.fills)
+  }
+
+  @Test
+  fun memory_running_low_drops_every_layout() = onMain {
+    val list = ShadowListUtilsList(testContext)
+    host(list)
+    list.setRows(rows(6))
+    host(list)
+    assertEquals(6, list.layoutCache.count)
+    @Suppress("DEPRECATION")
+    list.trimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE)
+    assertEquals(6, list.layoutCache.count)
+    @Suppress("DEPRECATION")
+    list.trimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
+    assertEquals(0, list.layoutCache.count)
+  }
+
+  @Test
+  fun rows_kept_at_both_ends_and_moved_in_the_middle_keep_their_row_objects() = onMain {
+    val list = ShadowListUtilsList(testContext)
+    val items = List(8) { "item-$it" }
+    val first = list.rows(items, emptyList(), emptyList(), { it }) { CountingRow(it) }
+    val next = listOf("new-a") + items.take(3) + listOf(items[5], items[4]) + items.drop(6) + listOf("new-b")
+    val second = list.rows(next, items, first, { it }) { CountingRow(it) }
+    assertEquals(next, second.map { it.key })
+    for ((index, key) in next.withIndex()) {
+      val previous = items.indexOf(key)
+      if (previous >= 0) assertSame(first[previous], second[index]) else assertNotNull(second[index])
+    }
   }
 
   @Test

@@ -45,7 +45,7 @@ const useStyles = createStyles((theme) =>
     button: {
       minWidth: 32,
       height: 32,
-      borderRadius: theme.radius.sm,
+      borderRadius: theme.radius.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },

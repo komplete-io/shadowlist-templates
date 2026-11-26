@@ -33,6 +33,17 @@ if (!shadowlistRoot.resolve("packages/shadowlist-android/settings.gradle.kts").i
 }
 gradle.extra["shadowlistRoot"] = shadowlistRoot
 
+// ShadowListUtils's renderer coordinates resolve to the vendored parser and UI here too.
+includeBuild("../../packages/enriched-markdown-android") {
+  dependencySubstitution {
+    val markdownGroup = if (System.getenv("JITPACK") == "true") {
+      "${System.getenv("GROUP") ?: "com.github.komplete-io"}.${System.getenv("ARTIFACT") ?: "shadowlist-templates"}"
+    } else "io.github.azimgd"
+    substitute(module("$markdownGroup:enriched-markdown-ui")).using(project(":ui"))
+    substitute(module("$markdownGroup:enriched-markdown-parser")).using(project(":parser"))
+  }
+}
+
 include(":ShadowListKit")
 project(":ShadowListKit").projectDir = shadowlistRoot.resolve("packages/shadowlist-android/ShadowListKit")
 include(":ShadowListUtils")

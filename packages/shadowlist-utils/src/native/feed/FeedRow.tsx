@@ -169,7 +169,6 @@ export const FeedRow = memo(
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={styles.strip}
               contentContainerStyle={styles.stripContent}
             >
               {images.map((image, index) =>
@@ -266,16 +265,16 @@ const useStyles = createStyles((theme) =>
       width: '100%',
       height: '100%',
     },
-    strip: {
-      marginHorizontal: -theme.spacing.xs,
-    },
+    /*
+     * The first photo starts at the text column's leading edge, like the text above it.
+     * Photos sit theme.spacing.sm apart.
+     */
     stripContent: {
-      paddingHorizontal: theme.spacing.xs,
+      gap: theme.spacing.sm,
     },
     stripImage: {
       width: 280,
       height: SINGLE_IMAGE_HEIGHT,
-      marginHorizontal: theme.spacing.xs,
     },
     separator: {
       position: 'absolute',

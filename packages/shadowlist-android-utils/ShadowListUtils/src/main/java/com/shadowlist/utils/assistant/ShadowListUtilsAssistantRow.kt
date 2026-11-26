@@ -3,7 +3,7 @@ package com.shadowlist.utils
 import android.content.Context
 
 /*
- * An immutable row snapshot. Its layout uses model data and captured presentation state only;
+ * An immutable row snapshot. Its layout uses model data, captured presentation state and cached Markdown heights;
  * application formatters resolve on the UI owner before this row reaches background prefetch.
  */
 internal class ShadowListUtilsAssistantRow(
@@ -19,13 +19,15 @@ internal class ShadowListUtilsAssistantRow(
   val handlers: ShadowListUtilsAssistantHandlers,
   val onActionsChange: (String, Boolean) -> Unit,
   val onExpansionChange: (String, Boolean, Set<String>) -> Unit,
+  val markdownRevision: Int = 0,
+  val onMarkdownHeightChange: (String) -> Unit = {},
 ) : ShadowListUtilsRow {
   val item = item.snapshot()
   val turn = turn?.snapshot()
   val expandedToolKeys = expandedToolKeys.toSet()
   private val texts = (item as? ShadowListUtilsAssistantMessage.Assistant)?.let { ShadowListUtilsAssistantReplyMessage.textSnapshot(it.reply, turn, labels) }
   override val key: String get() = item.key
-  override val contentVersion = listOf(item, turn, busy, isLatest, actionsVisible, thinkingExpanded, this.expandedToolKeys, handlers.onFeedback != null, handlers.onRetry != null).hashCode()
+  override val contentVersion = listOf(item, turn, busy, isLatest, actionsVisible, thinkingExpanded, this.expandedToolKeys, handlers.onFeedback != null, handlers.onRetry != null, markdownRevision).hashCode()
   override val reuseIdentifier: String get() = REUSE_IDENTIFIER
   override fun makeView(context: Context): ShadowListUtilsRowView = ShadowListUtilsAssistantRowView(context)
 

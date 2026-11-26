@@ -12,13 +12,17 @@ public final class ShadowListUtilsAssistantEmpty: UIView {
   private let mark = UIImageView(image: ShadowListUtilsSparkleIcon.image(size: 28))
   private let title = ShadowListKitTextView(frame: .zero)
   private let subtitle = ShadowListKitTextView(frame: .zero)
+  private let rows = UIView()
+  private var separators: [UIView] = []
   private var buttons: [UIButton] = []
   private var measuredWidth: CGFloat = -1
   public init(theme: ShadowListUtilsTheme = .system) {
     self.theme = theme
     super.init(frame: .zero)
     mark.backgroundColor = theme.colors.accent; mark.tintColor = theme.colors.onAccent
-    mark.contentMode = .center; mark.layer.cornerRadius = 28
+    mark.contentMode = .center; mark.layer.cornerRadius = min(theme.radius.pill, (theme.tapTarget + theme.spacing.md) / 2)
+    rows.backgroundColor = theme.colors.elevated; rows.layer.cornerRadius = theme.grouped.radius; rows.clipsToBounds = true
+    addSubview(rows)
     addSubview(mark); addSubview(title); addSubview(subtitle)
     title.isAccessibilityElement = true; title.accessibilityTraits = .header
     subtitle.isAccessibilityElement = true
@@ -27,11 +31,12 @@ public final class ShadowListUtilsAssistantEmpty: UIView {
   public required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
   private func rebuildSuggestions() {
     buttons.forEach { $0.removeFromSuperview() }
+    separators.forEach { $0.removeFromSuperview() }; separators = []
     let theme = self.theme
     buttons = suggestions.map { suggestion in
       let button = UIButton(type: .system)
       var configuration = UIButton.Configuration.plain()
-      configuration.title = suggestion.title; configuration.subtitle = suggestion.prompt
+      configuration.title = suggestion.title; configuration.subtitle = suggestion.description ?? suggestion.prompt
       configuration.titleAlignment = .leading
       configuration.titlePadding = theme.spacing.xxs
       configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { _ in
@@ -41,17 +46,20 @@ public final class ShadowListUtilsAssistantEmpty: UIView {
         AttributeContainer(theme.typography.footnote.attributedString(" ", color: theme.colors.secondaryLabel).attributes(at: 0, effectiveRange: nil))
       }
       configuration.baseForegroundColor = theme.colors.label
-      configuration.contentInsets = NSDirectionalEdgeInsets(top: theme.spacing.md, leading: theme.spacing.md, bottom: theme.spacing.md, trailing: theme.spacing.md)
+      configuration.contentInsets = NSDirectionalEdgeInsets(top: theme.spacing.md, leading: theme.grouped.rowInset, bottom: theme.spacing.md, trailing: theme.grouped.rowInset)
       configuration.titleLineBreakMode = .byWordWrapping
       configuration.subtitleLineBreakMode = .byWordWrapping
       button.configuration = configuration
-      button.backgroundColor = theme.colors.elevated; button.layer.cornerRadius = theme.radius.md
+      button.backgroundColor = theme.colors.elevated
       button.contentHorizontalAlignment = .leading
       button.contentVerticalAlignment = .top
-      button.accessibilityLabel = suggestion.title; button.accessibilityHint = suggestion.prompt
+      button.accessibilityLabel = suggestion.title; button.accessibilityHint = suggestion.description ?? suggestion.prompt
       button.isEnabled = onSelectSuggestion != nil
       button.addAction(UIAction { [weak self] _ in self?.select(suggestion) }, for: .touchUpInside)
-      addSubview(button)
+      button.titleLabel?.numberOfLines = 0
+      rows.addSubview(button)
+      let separator = UIView(); separator.backgroundColor = theme.colors.separator
+      rows.addSubview(separator); separators.append(separator)
       return button
     }
     invalidateIntrinsicContentSize(); setNeedsLayout()
@@ -73,9 +81,10 @@ public final class ShadowListUtilsAssistantEmpty: UIView {
     let inner = max(1, width - 2 * spacing.lg)
     let heading = theme.typography.title2.layout(labels.emptyTitle, width: inner, maxLines: 0, scaled: true, alignment: .center)
     let detail = theme.typography.subhead.layout(labels.emptySubtitle, width: inner, maxLines: 0, scaled: true, alignment: .center)
-    var y: CGFloat = 48
-    if apply { mark.frame = CGRect(x: (width - 56) / 2, y: y, width: 56, height: 56) }
-    y += 56 + spacing.lg
+    var y = spacing.xxl
+    let markSize = theme.tapTarget + spacing.md
+    if apply { mark.frame = CGRect(x: ShadowListUtilsPlatform.floorToPixel((width - markSize) / 2), y: y, width: markSize, height: markSize) }
+    y += markSize + spacing.lg
     if apply {
       title.show(heading, theme.colors.label); title.accessibilityLabel = labels.emptyTitle
       title.frame = CGRect(x: spacing.lg, y: y, width: inner, height: heading.size.height)
@@ -90,22 +99,24 @@ public final class ShadowListUtilsAssistantEmpty: UIView {
       y += detail.size.height
     }
     if apply { subtitle.isHidden = labels.emptySubtitle.isEmpty }
+    if apply { rows.isHidden = suggestions.isEmpty }
     guard !suggestions.isEmpty else { return y + spacing.xxl }
     y += spacing.xxl
-    let columns = ShadowListUtilsPlatform.textScale > 1.4 || inner < 240 ? 1 : 2
-    let cardWidth = (inner - CGFloat(columns - 1) * spacing.sm) / CGFloat(columns)
-    let direction = ShadowListUtilsDirection(width: width)
-    for start in stride(from: 0, to: suggestions.count, by: columns) {
-      let end = min(start + columns, suggestions.count)
-      let height = suggestions[start..<end].map { item in
-        theme.typography.subhead.with(.semibold).layout(item.title, width: cardWidth - 2 * spacing.md).size.height
-          + spacing.xxs + theme.typography.footnote.layout(item.prompt, width: cardWidth - 2 * spacing.md, maxLines: 2).size.height + 2 * spacing.md
-      }.max() ?? 0
-      if apply { for index in start..<end {
-        buttons[index].frame = direction.place(CGRect(x: spacing.lg + CGFloat(index - start) * (cardWidth + spacing.sm), y: y, width: cardWidth, height: height))
-      } }
-      y += height + spacing.sm
+    let rowsTop = y
+    for (index, item) in suggestions.enumerated() {
+      if index > 0 { y += ShadowListUtilsTheme.hairline }
+      let textWidth = max(1, inner - 2 * theme.grouped.rowInset)
+      let height = max(theme.grouped.rowHeight,
+        theme.typography.subhead.with(.semibold).layout(item.title, width: textWidth).size.height
+          + spacing.xxs + theme.typography.footnote.layout(item.description ?? item.prompt, width: textWidth, maxLines: 2).size.height + 2 * spacing.md)
+      if apply {
+        buttons[index].frame = CGRect(x: 0, y: y - rowsTop, width: inner, height: height)
+        separators[index].isHidden = index == 0
+        separators[index].frame = CGRect(x: 0, y: y - rowsTop - ShadowListUtilsTheme.hairline, width: inner, height: ShadowListUtilsTheme.hairline)
+      }
+      y += height
     }
-    return y - spacing.sm + spacing.xxl
+    if apply { rows.frame = CGRect(x: spacing.lg, y: rowsTop, width: inner, height: y - rowsTop) }
+    return y + spacing.xxl
   }
 }

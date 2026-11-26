@@ -4,8 +4,8 @@ import type { AssistantPrompt } from './types';
 
 /*
  * The size spec below copies these numbers and the bubble styles of AssistantUserMessage. Keep
- * them in step or the predicted height is wrong. assistantUserMessageSizeSpec in the core's
- * utils/ChatLayout.hpp is the same rule, and vectors.test holds the two equal.
+ * them in step or the predicted height is wrong. assistantUserMessageSizeSpec in
+ * shadowlist-utils-core/ChatLayout.hpp is the same rule, and vectors.test holds the two equal.
  */
 export const BUBBLE_WIDTH_FRACTION = 0.8;
 export const BUBBLE_PADDING_HORIZONTAL = 14;

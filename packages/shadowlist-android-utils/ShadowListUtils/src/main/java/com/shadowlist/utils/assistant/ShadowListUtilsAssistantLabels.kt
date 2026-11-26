@@ -12,6 +12,8 @@ data class ShadowListUtilsAssistantLabels(
   val share: String = "Share",
   val regenerate: String = "Regenerate",
   val retry: String = "Retry",
+  val resume: String = "Continue",
+  val resumeMessage: String = "The last reply did not finish.",
   val goodResponse: String = "Good response",
   val badResponse: String = "Bad response",
   val previousVersion: String = "Previous version",

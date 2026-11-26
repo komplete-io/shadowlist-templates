@@ -32,10 +32,4 @@ std::string sectionInitial(std::string_view name) {
   return title;
 }
 
-std::vector<ContactSection> groupContactsIntoSections(const std::vector<std::string>& titles) {
-  return groupContactsIntoSections(titles, [](const std::string& first, const std::string& second) {
-    return first < second;
-  });
-}
-
 }

@@ -3,13 +3,6 @@ import ShadowListKit
 import UIKit
 
 /*
- * The platform's color, font and view.
- */
-typealias ShadowListUtilsColor = UIColor
-typealias ShadowListUtilsFont = UIFont
-typealias ShadowListUtilsView = UIView
-
-/*
  * What a layout needs from the device: the pixel grid, the reader's text size, the layout
  * direction and the window's height. Only the main thread may ask UIKit for them. A list
  * resolves them there when it is made and when the text size changes, and a row's layout reads
@@ -215,7 +208,7 @@ struct ShadowListUtilsDirection {
 }
 
 extension ShadowListKitTextView {
-  func show(_ layout: ShadowListKitTextLayout?, _ color: ShadowListUtilsColor) {
+  func show(_ layout: ShadowListKitTextLayout?, _ color: UIColor) {
     textColor = color
     textLayout = layout
   }

@@ -18,15 +18,15 @@ enum Scenario {
     guard let name = UserDefaults.standard.string(forKey: "SLScenario") else { return }
     let list = screen.list!
     if name == "animate" || name == "a11y", let kitList = list.view as? ShadowListKitListView {
-      after(1.5) { name == "animate" ? checkAnimation(screen, kitList) : checkAccessibility(kitList) }
+      Frames.whenRowsShow(in: kitList) { name == "animate" ? checkAnimation(screen, kitList) : checkAccessibility(kitList) }
       return
     }
     if name == "cost" {
-      // The background layout prefetch finishes first. It would compete with the timed updates.
-      after(4) { measureUpdateCost(screen) }
+      // The engines that host rows pause the layouts they make ahead while the updates are timed.
+      Frames.whenRowsShow(in: list.view) { measureUpdateCost(screen) }
       return
     }
-    after(1.5) {
+    Frames.whenRowsShow(in: list.view) {
       let scroll = list.view
       let inset = scroll.adjustedContentInset
       // Rest in the middle of the loaded content, away from both ends.
@@ -34,15 +34,23 @@ enum Scenario {
       if name != "jump" {
         scroll.setContentOffset(CGPoint(x: 0, y: middle), animated: false)
       }
-      after(1.0) {
+      // The rows at the middle are laid out and shown two frames on.
+      Frames.after(frames: 2) {
         let before = visibleRows(scroll)
+        let rowCount = list.rows.count
         switch name {
         case "prepend": screen.prependRows()
         case "append": screen.appendRows()
         case "jump": list.scrollToItem(at: list.rows.count * 3 / 4, animated: false)
         default: break
         }
-        after(1.0) {
+        // Rows added through the fake network arrive later. The result waits for them.
+        let changed: () -> Bool = { name == "jump" || list.rows.count != rowCount }
+        var shown = 0
+        Frames.when({
+          if changed() { shown += 1 }
+          return shown >= 2
+        }) {
           var result: [String: Any] = ["scenario": name, "engine": screen.engine.rawValue, "screen": String(describing: type(of: screen))]
           if name == "jump" {
             let target = list.rows[list.rows.count * 3 / 4].key
@@ -129,7 +137,8 @@ enum Scenario {
     let survivorBefore = kitList.cellForItem(at: first + 2).map { $0.center.y - kitList.contentOffset.y } ?? -1
     (screen as? FeedScreen)?.animateChange(first: first)
     kitList.layoutIfNeeded()
-    after(0.06) {
+    // Four frames into the change animation.
+    Frames.after(frames: 4) {
       let inserted = kitList.cellForItem(at: first + 2)
       let survivor = kitList.cellForItem(at: first + 1)
       let during: [String: Any] = [
@@ -138,7 +147,7 @@ enum Scenario {
         "survivorScreenYBefore": Double(survivorBefore),
         "survivorScreenYAfter": Double(survivor.map { $0.center.y - kitList.contentOffset.y } ?? -1),
       ]
-      after(0.7) {
+      Frames.when({ Frames.settled(kitList) }) {
         let settled = kitList.visibleCells.allSatisfy { $0.alpha == 1 && $0.transform.isIdentity }
         let topAfter = kitList.cellForItem(at: first).map { $0.frame.minY - kitList.contentOffset.y } ?? -1
         finish(["scenario": "animate", "during": during, "settled": settled, "firstRowMoved": Double(topAfter - topBefore)])
@@ -168,10 +177,6 @@ enum Scenario {
     if UserDefaults.standard.bool(forKey: "SLBenchExit") {
       exit(0)
     }
-  }
-
-  private static func after(_ seconds: Double, _ work: @escaping () -> Void) {
-    DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
   }
 
   /*

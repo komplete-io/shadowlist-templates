@@ -7,7 +7,7 @@ export interface PollTally {
 
 /*
  * The votes in all and the first option with strictly the most. pollTally and pollPercent in
- * the core's utils/PollTally.hpp are the same rules, and vectors.test holds them equal.
+ * shadowlist-utils-core/PollTally.hpp are the same rules, and vectors.test holds them equal.
  */
 export function getPollTally(options: ReadonlyArray<PollOption>): PollTally {
   let total = 0;

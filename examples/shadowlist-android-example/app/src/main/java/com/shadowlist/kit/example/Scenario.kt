@@ -9,9 +9,11 @@ import android.util.Log
 import android.view.Choreographer
 import android.view.View
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
 import com.shadowlist.kit.ShadowListKitListView
 import com.shadowlist.utils.ShadowListUtilsList
 import com.shadowlist.utils.ShadowListUtilsListFooter
+import com.shadowlist.utils.ShadowListUtilsRow
 import com.shadowlist.utils.ShadowListUtilsRowView
 import org.json.JSONObject
 import kotlin.math.abs
@@ -20,17 +22,23 @@ import kotlin.math.min
 
 /*
  * Scripted checks, started with --es SLScenario <name> on a list screen. Each logs one
- * SLSCENARIO JSON line and quits with --es SLBenchExit 1. The same scenarios as the UIKit example.
+ * SLSCENARIO JSON line and quits with --es SLBenchExit 1.
  *
  *   prepend  scroll into the list, add rows at the start, measure how far visible rows moved
  *   append   same with rows added at the end
  *   cost     UI thread time of one data update plus the layout it causes, medians, with the
- *            layout prefetch finished and paused. SLCostRuns updates of each kind, default 15.
+ *            hosted layout prefetch paused. SLCostRuns updates of each kind, default 15.
  *            prependMs and appendMs count the list's work, the *TotalMs fields add the
  *            screen building its rows
  *   edges    prepend and append at the start, at the end and during a fling, shrink, grow back
  *            and grow from one row. Logs each step's largest row shift and the largest
  *            uncovered stretch of the viewport in any frame
+ *   ops      UI thread time of large updates and jumps, medians of SLCostRuns rounds: SLOpsCount
+ *            items (default 100) inserted and deleted at the start and the middle, and a jump far
+ *            down and back. Each time is the update plus the measure and layout it causes.
+ *            RecyclerView engines also report diffMs, what DiffUtil (ListAdapter's diff) takes
+ *            for the same change on the UI thread. *CpuMs is the UI thread's CPU time of the
+ *            total, which contention on the host moves less than the wall time
  */
 class Scenario private constructor(private val screen: ListScreen, private val exit: Boolean) {
   companion object {
@@ -41,10 +49,10 @@ class Scenario private constructor(private val screen: ListScreen, private val e
       val scenario = Scenario(screen, intent.getStringExtra("SLBenchExit") == "1")
       scenario.costRuns = intent.getStringExtra("SLCostRuns")?.toIntOrNull()?.takeIf { it > 0 } ?: 15
       when (name) {
-        // The background layout prefetch finishes first. It would compete with the timed updates.
-        "cost" -> scenario.after(2000) { screen.list.whenIdle { scenario.measureUpdateCost() } }
-        "prepend", "append" -> scenario.after(1500) { scenario.measureShift(name) }
-        "edges" -> scenario.after(1500) { EdgeChecks(screen) { scenario.report(it, name) }.start() }
+        "cost" -> scenario.whenReady { screen.list.whenIdle { scenario.measureUpdateCost() } }
+        "ops" -> scenario.whenReady { screen.list.whenIdle { scenario.measureOps(intent.getStringExtra("SLOpsCount")?.toIntOrNull() ?: 100) } }
+        "prepend", "append" -> scenario.whenReady { scenario.measureShift(name) }
+        "edges" -> scenario.whenReady { EdgeChecks(screen) { scenario.report(it, name) }.start() }
       }
     }
   }
@@ -55,21 +63,22 @@ class Scenario private constructor(private val screen: ListScreen, private val e
    * Updates of each kind the cost scenario times, --es SLCostRuns.
    */
   private var costRuns = 15
-  private val view: View get() = screen.view
+  private val view: View get() = screen.list.backend.view
 
-  private fun after(millis: Long, work: () -> Unit) {
-    handler.postDelayed(work, millis)
-  }
+  /*
+   * The screen drew its rows and they hold still.
+   */
+  private fun whenReady(work: () -> Unit) = settled(screen.list.backend.view, work)
 
   /*
    * Rest mid list, change the data, and report how far the rows on screen moved.
    */
   private fun measureShift(name: String) {
     view.scrollBy(0, 4000)
-    after(1000) {
+    settled(screen.list.backend.view) {
       val before = visibleRows()
       if (name == "prepend") screen.prependRows() else screen.appendRows()
-      after(1000) {
+      settled(screen.list.backend.view) {
         val after = visibleRows()
         var shift = 0
         var kept = 0
@@ -103,6 +112,74 @@ class Scenario private constructor(private val screen: ListScreen, private val e
   }
 
   /*
+   * Large inserts and deletes at the start and the middle, and jumps, while resting mid list.
+   * Every round deletes what it inserted, which keeps the row count.
+   */
+  private fun measureOps(count: Int) {
+    view.scrollBy(0, 20000)
+    forceLayout()
+    screen.list.prefetchPaused = true
+    val times = LinkedHashMap<String, ArrayList<Double>>()
+    fun record(name: String, value: Double) = times.getOrPut(name) { ArrayList() }.add(value)
+    var supported = true
+    repeat(costRuns) {
+      for ((name, at) in listOf("Start" to 0, "Middle" to screen.list.rows.size / 2)) {
+        val before = screen.list.rows
+        val cpuStart = android.os.Debug.threadCpuTimeNanos()
+        val inserted = timed { supported = screen.insertRows(at, count) && supported }
+        record("insert${name}CpuMs", (android.os.Debug.threadCpuTimeNanos() - cpuStart) / 1e6)
+        record("insert${name}Ms", inserted.first)
+        record("insert${name}TotalMs", inserted.second)
+        diffMs(before, screen.list.rows)?.let { record("insert${name}DiffMs", it) }
+        val grown = screen.list.rows
+        val deleteCpuStart = android.os.Debug.threadCpuTimeNanos()
+        val deleted = timed { supported = screen.deleteRows(at, count) && supported }
+        record("delete${name}CpuMs", (android.os.Debug.threadCpuTimeNanos() - deleteCpuStart) / 1e6)
+        record("delete${name}Ms", deleted.first)
+        record("delete${name}TotalMs", deleted.second)
+        diffMs(grown, screen.list.rows)?.let { record("delete${name}DiffMs", it) }
+      }
+      val far = screen.list.rows.size * 3 / 4
+      record("jumpFarMs", timedJump(far))
+      record("jumpBackMs", timedJump(screen.list.rows.size / 4))
+    }
+    screen.list.prefetchPaused = false
+    fun median(values: List<Double>) = values.sorted()[values.size / 2]
+    val result = JSONObject().put("rows", screen.list.rows.size).put("opsCount", count).put("rounds", costRuns)
+    if (!supported) result.put("error", "screen has no insertRows or deleteRows")
+    for ((name, values) in times) result.put(name, median(values))
+    MountClock.write(result)
+    report(result, "ops")
+  }
+
+  /*
+   * A jump with no animation, plus the layout that shows the rows there, in milliseconds.
+   */
+  private fun timedJump(index: Int): Double {
+    val start = SystemClock.elapsedRealtimeNanos()
+    screen.list.backend.scrollToItem(index, false)
+    forceLayout()
+    return (SystemClock.elapsedRealtimeNanos() - start) / 1e6
+  }
+
+  /*
+   * What DiffUtil takes over the keys and content versions of two row lists, for the
+   * RecyclerView engines, in milliseconds. ListAdapter runs it on a background thread.
+   */
+  private fun diffMs(before: List<ShadowListUtilsRow>, after: List<ShadowListUtilsRow>): Double? {
+    if (screen.engine.isShadowList) return null
+    val start = SystemClock.elapsedRealtimeNanos()
+    DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+      override fun getOldListSize() = before.size
+      override fun getNewListSize() = after.size
+      override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) = before[oldItemPosition].key == after[newItemPosition].key
+      override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) =
+        before[oldItemPosition].contentVersion == after[newItemPosition].contentVersion
+    }, false)
+    return (SystemClock.elapsedRealtimeNanos() - start) / 1e6
+  }
+
+  /*
    * The list's time and the total time of one update, in milliseconds.
    */
   private fun timed(work: () -> Unit): Pair<Double, Double> {
@@ -130,10 +207,98 @@ class Scenario private constructor(private val screen: ListScreen, private val e
   fun report(result: JSONObject, name: String) {
     result.put("scenario", name).put("engine", screen.engine.id).put("screen", screen.javaClass.simpleName)
     Log.i(TAG, result.toString())
-    if (exit) after(300) { Process.killProcess(Process.myPid()) }
+    // Log writes reach logd before it returns.
+    if (exit) handler.post { Process.killProcess(Process.myPid()) }
   }
 
   private fun visibleRows(): Map<String, Int> = visibleRowsOf(view)
+}
+
+/*
+ * Time from the start of building a screen to the first frame the window draws with it, for
+ * the bench and the ops scenario. The screen loads its items in that span.
+ */
+object MountClock {
+  private var startNanos = 0L
+  var firstFrameMs = -1.0
+    private set
+
+  fun start() {
+    startNanos = SystemClock.elapsedRealtimeNanos()
+    firstFrameMs = -1.0
+  }
+
+  /*
+   * The next frame the window commits ends the span. Logs one SLMOUNT line.
+   */
+  fun stopAtFirstFrame(view: View, engine: Engine, route: String?) {
+    if (android.os.Build.VERSION.SDK_INT < 29) return
+    view.viewTreeObserver.registerFrameCommitCallback {
+      firstFrameMs = (SystemClock.elapsedRealtimeNanos() - startNanos) / 1e6
+      Log.i("SLMOUNT", JSONObject().put("engine", engine.id).put("route", route).put("firstFrameMs", firstFrameMs)
+        .put("count", Settings.count).toString())
+    }
+  }
+
+  fun write(result: JSONObject) {
+    result.put("firstFrameMs", firstFrameMs)
+  }
+}
+
+/*
+ * Display frames a list's rows must hold still for to count as settled, and the most frames
+ * settled waits before it runs the work anyway.
+ */
+private const val SETTLED_FRAMES = 3
+private const val MAX_SETTLE_FRAMES = 600
+
+/*
+ * Run work on the first display frame after the list's offset and the place of every row on
+ * screen stayed the same for SETTLED_FRAMES frames, with until true: a scroll command, a fling,
+ * a change animation or a data change landed.
+ */
+fun settled(list: View, work: () -> Unit) = settled(list, { true }, work)
+
+fun settled(list: View, until: () -> Boolean, work: () -> Unit) {
+  var previous: List<Float>? = null
+  var still = 0
+  var frames = 0
+  Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+    override fun doFrame(frameTimeNanos: Long) {
+      val current = motionOf(list)
+      still = if (current == previous && until()) still + 1 else 0
+      previous = current
+      if (still >= SETTLED_FRAMES || ++frames >= MAX_SETTLE_FRAMES) work() else Choreographer.getInstance().postFrameCallback(this)
+    }
+  })
+}
+
+/*
+ * Where the list and the views in it two levels deep show and how opaque they are, which a
+ * scroll, a swipe, a fade or a layout changes.
+ */
+private fun motionOf(list: View): List<Float> {
+  val motion = arrayListOf(list.scrollX.toFloat(), list.scrollY.toFloat())
+  fun visit(view: View, depth: Int) {
+    motion.add(view.left + view.translationX)
+    motion.add(view.top + view.translationY)
+    motion.add(view.alpha)
+    if (view is ViewGroup && depth < 2) for (index in 0 until view.childCount) visit(view.getChildAt(index), depth + 1)
+  }
+  if (list is ViewGroup) for (index in 0 until list.childCount) visit(list.getChildAt(index), 0)
+  return motion
+}
+
+/*
+ * Run work count display frames from now.
+ */
+fun afterFrames(count: Int, work: () -> Unit) {
+  var left = count
+  Choreographer.getInstance().postFrameCallback(object : Choreographer.FrameCallback {
+    override fun doFrame(frameTimeNanos: Long) {
+      if (--left <= 0) work() else Choreographer.getInstance().postFrameCallback(this)
+    }
+  })
 }
 
 /*
@@ -163,7 +328,8 @@ fun visibleRowsOf(view: View): Map<String, Int> {
  */
 private class EdgeChecks(private val screen: ListScreen, private val done: (JSONObject) -> Unit) {
   private val handler = Handler(Looper.getMainLooper())
-  private val view: View get() = screen.view
+  private val view: View get() = screen.list.backend.view
+  private val listView: View get() = view
   private val result = JSONObject()
   private val original = screen.list.rows
 
@@ -213,7 +379,7 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
       resetMonitor()
       step {
         result.put(name + "Gap", maxGap).put(name + "Jerk", maxJerk).put(name + "Relative", maxRelative)
-        handler.postDelayed({ run(index + 1) }, 300)
+        settled(listView) { run(index + 1) }
       }
       currentStep = name
     }
@@ -234,14 +400,14 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
    */
   private fun shiftAt(index: Int, change: () -> Unit, next: () -> Unit) {
     screen.list.backend.scrollToItem(index, false)
-    handler.postDelayed({ shift(change, next) }, 700)
+    settled(listView) { shift(change, next) }
   }
 
   private fun shift(change: () -> Unit, next: () -> Unit) {
     resetMonitor()
     val before = visibleRowsOf(view)
     change()
-    handler.postDelayed({
+    settled(listView) {
       val after = visibleRowsOf(view)
       var moved = 0
       var kept = 0
@@ -252,7 +418,7 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
       }
       result.put(currentStep + "Shift", moved).put(currentStep + "Kept", "$kept/${before.size}")
       next()
-    }, 700)
+    }
   }
 
   /*
@@ -260,7 +426,7 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
    */
   private fun flingWithChanges(next: () -> Unit) {
     screen.list.backend.scrollToItem(screen.list.rows.size / 2, false)
-    handler.postDelayed({
+    settled(listView) {
       resetMonitor()
       val script = TouchScript(view)
       val x = view.width / 2f
@@ -271,11 +437,11 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
         script.up(x, y - step * 5)
         // Synthesized moves don't line up with frames. Judge the momentum only.
         resetMonitor()
-        handler.postDelayed({ screen.prependRows() }, 150)
-        handler.postDelayed({ screen.appendRows() }, 350)
-        handler.postDelayed(next, 2500)
+        afterFrames(9) { screen.prependRows() }
+        afterFrames(21) { screen.appendRows() }
+        settled(listView, next)
       }
-    }, 700)
+    }
   }
 
   /*
@@ -289,10 +455,10 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
         if (count < 8) {
           ++count
           screen.list.setRows(original.take(count), RowChange.Append(1))
-          handler.postDelayed(this, 100)
+          afterFrames(6, this::run)
           return
         }
-        handler.postDelayed({
+        settled(listView) {
           val rows = visibleRowsOf(view)
           val location = IntArray(2)
           view.getLocationOnScreen(location)
@@ -308,11 +474,11 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
           result.put("growVisible", rows.size).put("growFirstTop", (rows[original[0].key] ?: -1) - location[1])
             .put("growLastBottomFromEnd", location[1] + view.height - lastBottom)
           screen.list.setRows(original, RowChange.Update)
-          handler.postDelayed(next, 300)
-        }, 700)
+          settled(listView, next)
+        }
       }
     }
-    handler.postDelayed(grow, 300)
+    settled(listView, grow::run)
   }
 
   private val kit: ShadowListKitListView? get() = view as? ShadowListKitListView
@@ -323,21 +489,21 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
    */
   private fun resize(next: () -> Unit) {
     screen.list.backend.scrollToItem(screen.list.rows.size / 2, false)
-    handler.postDelayed({
-      val top = visibleRowsOf(view).minByOrNull { it.value } ?: return@postDelayed next()
+    settled(listView) {
+      val top = visibleRowsOf(view).minByOrNull { it.value } ?: return@settled next()
       val width = view.width
       view.layoutParams = view.layoutParams.apply { this.width = width * 2 / 3 }
-      handler.postDelayed({
+      settled(listView) {
         val narrow = visibleRowsOf(view)[top.key]
         view.layoutParams = view.layoutParams.apply { this.width = ViewGroup.LayoutParams.MATCH_PARENT }
-        handler.postDelayed({
+        settled(listView) {
           val back = visibleRowsOf(view)[top.key]
           result.put("resizeNarrowShift", narrow?.let { abs(it - top.value) } ?: -1)
             .put("resizeBackShift", back?.let { abs(it - top.value) } ?: -1)
           next()
-        }, 700)
-      }, 700)
-    }, 700)
+        }
+      }
+    }
   }
 
   /*
@@ -353,22 +519,22 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
       return abs((rect.centerY() - list.scrollY - window / 2f).toInt())
     }
     list.scrollToItem(middle, 0.5, animated = true)
-    handler.postDelayed({
+    settled(listView) {
       result.put("animatedToItemCenterError", centerError(middle))
       list.scrollToEnd(animated = true)
-      handler.postDelayed({
+      settled(listView) {
         result.put("animatedToEndError", list.contentSize - window - list.scrollY)
         list.scrollToStart(animated = true)
-        handler.postDelayed({
+        settled(listView) {
           result.put("animatedToStartError", list.scrollY)
           list.scrollToItem(middle + 7, 0.5)
-          handler.postDelayed({
+          settled(listView) {
             result.put("toItemCenterError", centerError(middle + 7))
             next()
-          }, 500)
-        }, 2000)
-      }, 2000)
-    }, 2000)
+          }
+        }
+      }
+    }
   }
 
   /*
@@ -400,19 +566,19 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
       }
     }
     list.scrollToItem(screen.list.rows.size / 2)
-    handler.postDelayed({
+    settled(listView) {
       starts = 0
       ends = 0
       val rowsBefore = screen.list.rows.size
       list.scrollToEnd()
-      handler.postDelayed({
+      settled(listView) {
         val before = visibleRowsOf(view)
-        handler.postDelayed({
+        settled(listView) {
           val after = visibleRowsOf(view)
           result.put("reachedEnds", ends).put("loadedRows", screen.list.rows.size - rowsBefore)
             .put("loadShift", before.entries.maxOfOrNull { (key, y) -> after[key]?.let { abs(it - y) } ?: 0 } ?: 0)
           list.scrollToStart()
-          handler.postDelayed({
+          settled(listView) {
             result.put("reachedStarts", starts)
             if (template != null) {
               template.onStartReached = null
@@ -421,10 +587,10 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
               list.delegate = previous
             }
             next()
-          }, 500)
-        }, 500)
-      }, 100)
-    }, 500)
+          }
+        }
+      }
+    }
   }
 
   /*
@@ -435,15 +601,15 @@ private class EdgeChecks(private val screen: ListScreen, private val done: (JSON
     if (!list.inverted) return next()
     list.followAppends = true
     list.scrollToEnd()
-    handler.postDelayed({
+    settled(listView) {
       screen.appendRows()
-      handler.postDelayed({
+      settled(listView) {
         val window = list.height - list.paddingTop - list.paddingBottom
         result.put("followAppendFromEnd", list.contentSize - window - list.scrollY)
         list.followAppends = false
         next()
-      }, 700)
-    }, 500)
+      }
+    }
   }
 
   private fun sampleFrame() {

@@ -9,7 +9,7 @@ final class AssistantMarkdownTests: XCTestCase {
 
   func testStableBlocksKeepTheirViewsWhileTheLastBlockAndStreamingDotGrow() throws {
     let markdown = ShadowListUtilsAssistantMarkdown(text: "# Title\n\nA reply", theme: theme)
-    let first = try XCTUnwrap(markdown.subviews.compactMap { $0 as? ShadowListUtilsAssistantMarkdownBlock }.first)
+    let first = markdown.markdownView
     let height = markdown.sizeThatFits(CGSize(width: 250, height: 1000)).height
     markdown.text += " that keeps growing over several lines with a useful answer for the crew."
     XCTAssertTrue(markdown.subviews.contains { $0 === first })
@@ -20,8 +20,7 @@ final class AssistantMarkdownTests: XCTestCase {
   }
 
   func testDefaultUnsafeLinksAreBlockedAndACustomHandlerGetsTheOriginalTarget() throws {
-    let block = try XCTUnwrap(ShadowListUtilsCore.parseMarkdown("[Call](tel:+123)").first)
-    let view = ShadowListUtilsAssistantMarkdownBlock(block: block, theme: theme, labels: ShadowListUtilsAssistantLabels())
+    let view = ShadowListUtilsAssistantMarkdown(text: "[Call](tel:+123)", theme: theme)
     XCTAssertFalse(view.open("tel:+123"))
     var target: String?
     view.onOpenLink = { target = $0 }
@@ -29,33 +28,27 @@ final class AssistantMarkdownTests: XCTestCase {
     XCTAssertEqual(target, "  tel:+123  ")
   }
 
-  func testCodeWaitsForTheClosingFenceAndCopiedStateResetsAfterItsDelayAndDetach() throws {
-    let open = try XCTUnwrap(ShadowListUtilsCore.parseMarkdown("```swift\nlet text = 1").first)
-    let closed = try XCTUnwrap(ShadowListUtilsCore.parseMarkdown("```swift\nlet text = 1\n```").first)
-    let pending = ShadowListUtilsAssistantMarkdownBlock(block: open, theme: theme, labels: ShadowListUtilsAssistantLabels())
-    XCTAssertTrue(try XCTUnwrap(pending.subviews.compactMap { $0 as? UIButton }.first).isHidden)
-    let ready = ShadowListUtilsAssistantMarkdownBlock(block: closed, theme: theme, labels: ShadowListUtilsAssistantLabels())
-    let button = try XCTUnwrap(ready.subviews.compactMap { $0 as? UIButton }.first)
-    var copied: String?
-    ready.onCopyCode = { copied = $0 }
-    ready.copyCode()
-    XCTAssertEqual(copied, "let text = 1")
-    XCTAssertEqual(button.accessibilityLabel, "Copied")
-    let reset = expectation(description: "copied reset")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-      XCTAssertEqual(button.accessibilityLabel, "Copy code")
-      reset.fulfill()
-    }
-    wait(for: [reset], timeout: 2)
-    ready.copyCode()
-    ready.didMoveToWindow()
-    XCTAssertEqual(button.accessibilityLabel, "Copy code")
+  func testStreamingRepairAndCompletionKeepTheTextViewAndFittingHeight() throws {
+    let view = ShadowListUtilsAssistantMarkdown(theme: theme)
+    view.update(text: "**A partial", streaming: true)
+    let textView = try XCTUnwrap(view.markdownView.subviews.compactMap { $0 as? UITextView }.first)
+    XCTAssertEqual(textView.attributedText.string, "A partial")
+    view.update(text: "**A partial reply**", streaming: false)
+    XCTAssertTrue(view.markdownView.subviews.contains { $0 === textView })
+    XCTAssertEqual(textView.attributedText.string, "A partial reply")
+    let size = view.sizeThatFits(CGSize(width: 240, height: 1000))
+    XCTAssertEqual(size.height, ShadowListUtilsAssistantMarkdown.height(
+      text: "**A partial reply**", streaming: false, width: 240, theme: theme))
+    XCTAssertGreaterThan(size.height, 0)
   }
 
-  func testTheParserBridgePreservesEmbeddedNullCharacters() throws {
-    let text = "before\0after"
-    let block = try XCTUnwrap(ShadowListUtilsCore.parseMarkdown(text).first)
-    XCTAssertEqual(block.raw, text)
-    XCTAssertEqual(block.runs.first?.first?.text, text)
+  func testNativeSelectionCopiesRenderedText() throws {
+    let view = ShadowListUtilsAssistantMarkdown(text: "**Copy** this reply", theme: theme)
+    let textView = try XCTUnwrap(view.markdownView.subviews.compactMap { $0 as? UITextView }.first)
+    XCTAssertTrue(textView.isSelectable)
+    XCTAssertFalse(textView.isEditable)
+    textView.selectedRange = NSRange(location: 0, length: textView.attributedText.length)
+    textView.copy(nil)
+    XCTAssertEqual(UIPasteboard.general.string, "Copy this reply")
   }
 }

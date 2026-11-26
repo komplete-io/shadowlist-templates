@@ -1,8 +1,9 @@
 /*
  * The utilities in headless Chrome through the web example of this repository, driven over the
  * DevTools protocol. Skipped when no Chrome is found (CHROME_PATH picks the binary) or when the
- * example is not built. Run the example's build first. The kit comes from the engine checkout
- * at SHADOWLIST_ROOT (default ../shadowlist next to this repository).
+ * example is not built. Run the example's build first. In CI either one fails the run instead.
+ * The kit comes from the engine checkout at SHADOWLIST_ROOT (default ../shadowlist next to this
+ * repository).
  */
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -244,6 +245,14 @@ after(async () => {
     });
   }
 });
+
+// A skip in CI would pass a run that tested nothing.
+if (process.env.CI && process.env.SHADOWLIST_WASM_BROWSER !== '0') {
+  test('CI has what the browser tests need', () => {
+    assert.ok(CHROME, 'no Chrome found');
+    assert.equal(WEB_EXAMPLE_SKIP, false);
+  });
+}
 
 const browserTest = (name: string, body: (tab: Page) => Promise<void>) =>
   test(name, { skip: CHROME ? WEB_EXAMPLE_SKIP : 'no Chrome found' }, () =>

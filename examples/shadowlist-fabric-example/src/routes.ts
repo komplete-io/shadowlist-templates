@@ -25,6 +25,7 @@ import { CollapsingScreen } from './screens/CollapsingScreen';
 
 export type RootStackParamList = {
   Home: undefined;
+  Bench: undefined;
   ContactDetail: { contact: ContactItem };
 } & Record<ExampleRoute, undefined>;
 

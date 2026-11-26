@@ -1,5 +1,6 @@
 package com.shadowlist.utils
 
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.res.Configuration
 import android.view.Menu
@@ -9,6 +10,8 @@ import com.shadowlist.kit.ShadowListKitAnchorState
 import com.shadowlist.kit.ShadowListKitListView
 import com.shadowlist.kit.ShadowListKitSwipeActionsConfiguration
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /*
  * A ShadowListKitListView that shows rows. It is its own data source and delegate through one
@@ -157,6 +160,25 @@ open class ShadowListUtilsList private constructor(
   override fun onDetachedFromWindow() {
     super.onDetachedFromWindow()
     layoutCache.cancelPrefetch()
+    context.applicationContext.unregisterComponentCallbacks(memoryCallbacks)
+  }
+
+  /*
+   * Memory running low drops every layout. The rows lay out again when they show.
+   */
+  private val memoryCallbacks = object : ComponentCallbacks2 {
+    override fun onTrimMemory(level: Int) = trimMemory(level)
+
+    override fun onConfigurationChanged(newConfig: Configuration) {}
+
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onLowMemory() = trimMemory(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
+  }
+
+  @Suppress("DEPRECATION")
+  internal fun trimMemory(level: Int) {
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) layoutCache.invalidateAll()
   }
 
   // region Data
@@ -168,11 +190,21 @@ open class ShadowListUtilsList private constructor(
   fun setRows(rows: List<ShadowListUtilsRow>, animated: Boolean = false) {
     val previous = this.rows
     this.rows = rows
-    pruneLayouts()
     val animates = animatesChanges
     animatesChanges = animated
-    val inserted = insertedIndices(previous, rows)
-    if (inserted != null) insertItems(inserted) else applyChanges()
+    // One run inserted or deleted touches the cache's layouts of that run alone.
+    val run = runChange(previous, rows)
+    when {
+      run == null -> {
+        pruneLayouts()
+        applyChanges()
+      }
+      run.inserted -> insertItems(run.indices)
+      else -> {
+        for (index in run.indices) layoutCache.invalidate(previous[index].key)
+        deleteItems(run.indices)
+      }
+    }
     animatesChanges = animates
     appliedGeneration = contentGeneration
     replaceMountedRows()
@@ -186,38 +218,49 @@ open class ShadowListUtilsList private constructor(
     this.rows = rows
   }
 
+  private class RunChange(val inserted: Boolean, val indices: IntArray)
+
   /*
-   * Where the new rows sit when the rows before are all still there, unchanged and in one run
-   * at the start or the end: a pure append or prepend, which needs no diff. Null for any other
-   * change, and for a list with sections, whose counts change with the rows.
+   * The run that changed when the rows before and after agree, key and content version, up to
+   * it from the start and after it to the end: an append, a prepend, or one run inserted or
+   * deleted in the middle, which needs no diff. Null for any other change, and for a list with
+   * sections, whose counts change with the rows.
    */
-  private fun insertedIndices(previous: List<ShadowListUtilsRow>, rows: List<ShadowListUtilsRow>): IntArray? {
-    val added = rows.size - previous.size
-    if (previous.isEmpty() || added <= 0 || adapter.headerRows.isNotEmpty()) return null
+  private fun runChange(previous: List<ShadowListUtilsRow>, rows: List<ShadowListUtilsRow>): RunChange? {
+    if (previous.isEmpty() || rows.isEmpty() || rows.size == previous.size || adapter.headerRows.isNotEmpty()) return null
     // A new generation configures every cell again, which only a diff does.
     if (appliedGeneration != contentGeneration) return null
-    fun matches(offset: Int): Boolean {
-      for (index in previous.indices) {
-        val row = rows[index + offset]
-        if (row === previous[index]) continue
-        if (row.key != previous[index].key || row.contentVersion != previous[index].contentVersion) return false
-      }
-      return true
-    }
-    if (matches(0)) return IntArray(added) { previous.size + it }
-    return if (matches(added)) IntArray(added) { it } else null
+    fun same(a: ShadowListUtilsRow, b: ShadowListUtilsRow) = a === b || (a.key == b.key && a.contentVersion == b.contentVersion)
+    val shorter = min(previous.size, rows.size)
+    var head = 0
+    while (head < shorter && same(previous[head], rows[head])) ++head
+    var tail = 0
+    while (tail < shorter - head && same(previous[previous.size - 1 - tail], rows[rows.size - 1 - tail])) ++tail
+    if (head + tail != shorter) return null
+    return if (rows.size > previous.size) RunChange(true, IntArray(rows.size - tail - head) { head + it })
+    else RunChange(false, IntArray(previous.size - tail - head) { head + it })
   }
 
   /*
-   * The cache keeps the layouts of the rows and the section headers the list shows.
+   * The cache keeps the layouts of the rows and the section headers the list shows. A layout of a
+   * key that left takes memory only: the cache checks a layout against its row before use. The
+   * cache is pruned once it grew by a quarter since the last prune, which keeps an update from
+   * reading every key.
    */
   private fun pruneLayouts() {
-    if (layoutCache.count == 0) return
+    val count = layoutCache.count
+    if (count == 0 || count < prunedLayoutCount + max(PRUNE_SLACK, prunedLayoutCount / 4)) return
     val keys = HashSet<String>(rows.size * 2)
     for (row in rows) keys.add(row.key)
     for (header in adapter.headerRows) keys.add(header.key)
     layoutCache.prune(keys)
+    prunedLayoutCount = layoutCache.count
   }
+
+  /*
+   * The layouts the cache held after the last prune.
+   */
+  private var prunedLayoutCount = 0
 
   /*
    * A mounted cell keeps its row object while the content version stays. Hand it the row built
@@ -383,18 +426,36 @@ open class ShadowListUtilsList private constructor(
     make: (Item) -> ShadowListUtilsRow,
   ): List<ShadowListUtilsRow> {
     if (previousItems.size != previousRows.size || previousItems.isEmpty()) return items.map(make)
-    val positions = HashMap<String, Int>(previousItems.size * 2)
-    for ((position, item) in previousItems.withIndex()) positions[key(item)] = position
-    return items.map { item ->
+    // Items the same at the start and at the end keep their rows without a lookup by key.
+    val shorter = min(items.size, previousItems.size)
+    var start = 0
+    while (start < shorter && sameItem(items[start], previousItems[start], previousRows[start], key)) ++start
+    var end = 0
+    while (end < shorter - start &&
+      sameItem(items[items.size - 1 - end], previousItems[previousItems.size - 1 - end], previousRows[previousRows.size - 1 - end], key)) ++end
+    val previousEnd = previousItems.size - end
+    val positions = HashMap<String, Int>((previousEnd - start) * 2)
+    for (position in start until previousEnd) positions[key(previousItems[position])] = position
+    val result = ArrayList<ShadowListUtilsRow>(items.size)
+    for (index in items.indices) {
+      if (index < start) {
+        result.add(previousRows[index])
+        continue
+      }
+      if (index >= items.size - end) {
+        result.add(previousRows[index - items.size + previousItems.size])
+        continue
+      }
+      val item = items[index]
       val itemKey = key(item)
       val position = positions[itemKey]
-      if (position != null && previousItems[position] == item && previousRows[position].key == itemKey) {
-        previousRows[position]
-      } else {
-        make(item)
-      }
+      result.add(if (position != null && previousItems[position] == item && previousRows[position].key == itemKey) previousRows[position] else make(item))
     }
+    return result
   }
+
+  private inline fun <Item> sameItem(item: Item, previous: Item, previousRow: ShadowListUtilsRow, key: (Item) -> String): Boolean =
+    (item === previous || item == previous) && previousRow.key == key(item)
 
   // endregion
 
@@ -412,6 +473,7 @@ open class ShadowListUtilsList private constructor(
 
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
+    context.applicationContext.registerComponentCallbacks(memoryCallbacks)
     resolveDirection()
   }
 
@@ -449,5 +511,10 @@ open class ShadowListUtilsList private constructor(
 
   private companion object {
     const val GENERATION_SHIFT = 32
+
+    /*
+     * Layouts the cache may gain past the last prune before it is pruned again, at least.
+     */
+    const val PRUNE_SLACK = 256
   }
 }

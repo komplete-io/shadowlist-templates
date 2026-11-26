@@ -52,6 +52,7 @@ struct ExampleSection {
       Example(route: "Changes", title: "Changes", summary: "Insert, remove and update rows") { ChangesScreen() },
       Example(route: "Collapsing", title: "Collapsing", summary: "A list with a collapsing header") { CollapsingScreen() },
       Example(route: "Sections", title: "Sections", summary: "Section headers, footers and an index") { SectionsScreen() },
+      Example(route: "Bench", title: "Engine Bench", summary: "The rows the list engines are compared on") { BenchScreen() },
     ]),
   ]
 }

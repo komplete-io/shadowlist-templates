@@ -2,7 +2,8 @@ import ShadowListKit
 import ShadowListUtils
 
 /*
- * -SLTextAsync 1 draws the rows' text on a background queue. -SLImages 0 loads no images.
+ * -SLTextAsync 1 draws the rows' text on a background queue. -SLImages 0 loads no images, and
+ * -SLImages local loads them from files drawn on the device.
  */
 enum Rendering {
   static let asyncText = UserDefaults.standard.string(forKey: "SLTextAsync") == "1"
@@ -10,6 +11,9 @@ enum Rendering {
   static func apply() {
     if asyncText {
       ShadowListKitTextView.appearance().displaysAsynchronously = true
+    }
+    if Settings.localImages {
+      LocalImages.prepare()
     }
     if !Settings.images {
       ShadowListUtilsImageLoader.shared = NoImageLoader()

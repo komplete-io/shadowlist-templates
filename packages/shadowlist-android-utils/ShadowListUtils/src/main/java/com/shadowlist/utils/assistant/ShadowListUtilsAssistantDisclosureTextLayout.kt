@@ -1,5 +1,6 @@
 package com.shadowlist.utils
 
+import android.annotation.SuppressLint
 import android.text.Layout
 import android.text.SpannableString
 import android.text.Spanned
@@ -16,6 +17,10 @@ import android.widget.TextView
  * One immutable typesetting configuration for background row measurement and native selectable
  * text. No View, selection state or mutable editor escapes to the prefetch thread.
  */
+/*
+ * Layout's break strategies are the LineBreaker constants lint asks for, which need API 29.
+ */
+@SuppressLint("WrongConstant")
 internal class ShadowListUtilsAssistantDisclosureTextLayout(
   text: String, widthPx: Int, style: ShadowListUtilsTextStyle, expanded: Boolean, monospaced: Boolean = false,
 ) {

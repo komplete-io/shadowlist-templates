@@ -29,7 +29,7 @@ public enum ShadowListUtilsRedactedText {
 /*
  * Shows the bars of redacted text. Its frame is the frame the text would have.
  */
-final class ShadowListUtilsRedactedTextView: ShadowListUtilsView {
+final class ShadowListUtilsRedactedTextView: UIView {
   private var bars: [UIView] = []
 
   init() {
@@ -43,7 +43,7 @@ final class ShadowListUtilsRedactedTextView: ShadowListUtilsView {
     fatalError("init(coder:) has not been implemented")
   }
 
-  func show(_ frames: [CGRect], _ color: ShadowListUtilsColor) {
+  func show(_ frames: [CGRect], _ color: UIColor) {
     while bars.count < frames.count {
       let bar = UIView()
       addSubview(bar)

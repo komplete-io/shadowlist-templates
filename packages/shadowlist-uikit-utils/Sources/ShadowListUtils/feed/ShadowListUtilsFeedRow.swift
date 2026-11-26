@@ -342,17 +342,19 @@ public final class ShadowListUtilsFeedRowView: ShadowListUtilsRowView, UIGesture
     }
     let gap = row.theme.spacing.xs
     let contentWidth = CGFloat(layout.stripImageFrames.count) * (ShadowListUtilsFeedRow.stripImageSize.width + 2 * gap)
-    strip.contentInset = UIEdgeInsets(top: 0, left: gap, bottom: 0, right: gap)
+    // The strip's frame starts a gap before the text column and every image has a gap on both
+    // sides. At rest the first image's leading edge meets the text column's.
+    strip.contentInset = .zero
     strip.contentSize = CGSize(width: contentWidth, height: layout.stripFrame.height)
     guard stripKey != row.key else { return }
     stripKey = row.key
-    let end = max(-gap, contentWidth + gap - layout.stripFrame.width)
-    strip.contentOffset = CGPoint(x: ShadowListUtilsPlatform.isRightToLeft ? end : -gap, y: 0)
+    let end = max(0, contentWidth - layout.stripFrame.width)
+    strip.contentOffset = CGPoint(x: ShadowListUtilsPlatform.isRightToLeft ? end : 0, y: 0)
   }
 
   private func showBars(
     _ view: ShadowListUtilsRedactedTextView, _ layout: ShadowListKitTextLayout?, _ frame: CGRect, _ style: ShadowListUtilsTextStyle,
-    _ color: ShadowListUtilsColor
+    _ color: UIColor
   ) {
     view.frame = frame
     view.show(layout.map { ShadowListUtilsRedactedText.bars(for: $0, lineHeight: style.scaledLineHeight()) } ?? [], color)

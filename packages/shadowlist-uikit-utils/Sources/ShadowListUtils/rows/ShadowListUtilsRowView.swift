@@ -19,10 +19,10 @@ open class ShadowListUtilsRowView: ShadowListKitListCell {
    * The background at rest and while the row is pressed. Without a pressed color the row does
    * not highlight.
    */
-  var restingBackgroundColor: ShadowListUtilsColor? {
+  var restingBackgroundColor: UIColor? {
     didSet { updateBackground() }
   }
-  var pressedBackgroundColor: ShadowListUtilsColor? {
+  var pressedBackgroundColor: UIColor? {
     didSet { updateBackground() }
   }
 

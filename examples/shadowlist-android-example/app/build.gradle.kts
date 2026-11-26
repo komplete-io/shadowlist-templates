@@ -29,7 +29,7 @@ android {
     }
   }
 
-  // The engine's bench screens compile into the app.
+  // The engine's bench sources compile into the app.
   sourceSets["main"].java.srcDir(shadowlistRoot.resolve("packages/shadowlist-android/Bench/src"))
 
   compileOptions {

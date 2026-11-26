@@ -236,6 +236,27 @@ final class RowsTests: XCTestCase {
     XCTAssertEqual(list.keys.count, 6)
   }
 
+  func testARunInsertedOrDeletedInTheMiddleKeepsTheOtherRowsAndCells() {
+    let list = ShadowListUtilsList()
+    host(list)
+    var rows = rows(6)
+    list.setRows(rows)
+    list.layoutIfNeeded()
+    let after = list.rowView(at: 3)
+    rows.insert(contentsOf: [CountingRow(key: "new-0"), CountingRow(key: "new-1")], at: 3)
+    list.setRows(rows)
+    list.layoutIfNeeded()
+    XCTAssertEqual(list.keys, ["row-0", "row-1", "row-2", "new-0", "new-1", "row-3", "row-4", "row-5"])
+    XCTAssertTrue(list.rowView(at: 5) === after)
+    XCTAssertEqual(list.rectForItem(at: 5), CGRect(x: 0, y: 220, width: testWidth, height: 44))
+    rows.removeSubrange(1..<4)
+    list.setRows(rows)
+    list.layoutIfNeeded()
+    XCTAssertEqual(list.keys, ["row-0", "new-1", "row-3", "row-4", "row-5"])
+    XCTAssertTrue(list.rowView(at: 2) === after)
+    XCTAssertEqual(CountingRowView.fills, ["row-0": 1, "row-1": 1, "row-2": 1, "row-3": 1, "row-4": 1, "row-5": 1, "new-0": 1, "new-1": 1])
+  }
+
   func testTheCacheKeepsALayoutPerKeyWidthAndContentVersion() {
     let cache = ShadowListUtilsLayoutCache()
     var row = CountingRow(key: "cached")
@@ -262,6 +283,35 @@ final class RowsTests: XCTestCase {
     list.setRows(Array(rows(6).suffix(2)))
     list.layoutIfNeeded()
     XCTAssertEqual(list.layoutCache.count, 2)
+  }
+
+  func testAPrefetchKeepsTheLayoutsNearItAndAMemoryWarningDropsThemAll() {
+    let rows = rows(600)
+    let cache = ShadowListUtilsLayoutCache()
+    let far = cache.layout(rows[0], width: 300)
+    cache.prefetch(rows, width: 300, around: 500)
+    let deadline = Date(timeIntervalSinceNow: 5)
+    while cache.count != 2 * ShadowListUtilsLayoutCache.prefetchRadius, Date() < deadline {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+    // Rows 400 to 599 are laid out. Row 0 is past twice prefetchRadius and its layout is gone.
+    XCTAssertEqual(cache.count, 2 * ShadowListUtilsLayoutCache.prefetchRadius)
+    XCTAssertFalse(cache.layout(rows[0], width: 300) === far)
+    NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+    XCTAssertEqual(cache.count, 0)
+  }
+
+  func testAPrefetchWithAnExtentStopsOnceEachSideIsThatLong() {
+    let rows = rows(600)
+    let cache = ShadowListUtilsLayoutCache()
+    // 44 point rows: 440 points ahead and behind take ten rows on each side and one past it.
+    cache.prefetch(rows, width: 300, around: 300, extent: 440)
+    let deadline = Date(timeIntervalSinceNow: 5)
+    while cache.count < 23, Date() < deadline {
+      RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+    }
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+    XCTAssertEqual(cache.count, 23)
   }
 
   func testALayoutMadeWhileLayoutsWereDroppedIsNotKept() {

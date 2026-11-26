@@ -2,11 +2,13 @@ import UIKit
 
 /*
  * The example data, item for item the same as the React Native example's fixtures. Every
- * value is a pure function of the item's generation index, except the feed's time, which is
- * random there and (index % 24) hours ago here.
+ * value is a pure function of the item's generation index.
  */
 enum Fixtures {
   static func imageUrl(_ index: Int, width: Int) -> String {
+    if Settings.localImages {
+      return LocalImages.url(index % LocalImages.count)
+    }
     let clean = FixtureStrings.images[index % FixtureStrings.images.count].replacingOccurrences(of: "https://", with: "")
     return "https://images.weserv.nl/?url=\(clean)&q=60&w=\(width)"
   }
@@ -110,47 +112,5 @@ struct Photo {
     url = Fixtures.imageUrl(index, width: 400)
     let height = (400 * Photo.designHeights[index % Photo.designHeights.count] / 122).rounded()
     aspect = height / 400
-  }
-}
-
-/*
- * "first item", "twenty second item": the chat's debug captions, numbered like itemOrdinals.ts.
- */
-enum Ordinals {
-  private static let ones = [
-    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
-  ]
-  private static let tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
-  private static let scales: [(Int, String)] = [(1_000_000_000, "billion"), (1_000_000, "million"), (1000, "thousand"), (100, "hundred")]
-  private static let irregular = [
-    "one": "first", "two": "second", "three": "third", "five": "fifth", "eight": "eighth", "nine": "ninth", "twelve": "twelfth",
-  ]
-
-  static func words(_ value: Int) -> [String] {
-    if value < 20 { return [ones[value]] }
-    if value < 100 {
-      let rest = value % 10
-      return [tens[value / 10]] + (rest > 0 ? [ones[rest]] : [])
-    }
-    for (scale, name) in scales where value >= scale {
-      let rest = value % scale
-      return words(value / scale) + [name] + (rest > 0 ? words(rest) : [])
-    }
-    return []
-  }
-
-  static func label(_ value: Int) -> String {
-    var parts = words(value)
-    let last = parts.removeLast()
-    let ordinal: String
-    if let word = irregular[last] {
-      ordinal = word
-    } else if last.hasSuffix("y") {
-      ordinal = String(last.dropLast()) + "ieth"
-    } else {
-      ordinal = last + "th"
-    }
-    return (parts + [ordinal]).joined(separator: " ") + " item"
   }
 }

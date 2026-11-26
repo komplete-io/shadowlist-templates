@@ -75,7 +75,8 @@ class AssistantComponentsTest {
     view.suggestions = listOf(item, item)
     var selected: ShadowListUtilsAssistantSuggestion? = null
     view.onSelectSuggestion = { selected = it }
-    val button = (0 until view.childCount).map(view::getChildAt).first { it.isClickable }
+    val group = view.getChildAt(0) as android.view.ViewGroup
+    val button = (0 until group.childCount).map(group::getChildAt).first { it.isClickable }
     assertEquals(Button::class.java.name, button.createAccessibilityNodeInfo().className.toString())
     button.performClick()
     assertEquals(item, selected)
@@ -83,7 +84,13 @@ class AssistantComponentsTest {
     val narrow = measure(view, 210f.px)
     assertTrue(narrow > measure(view, 390f.px))
     view.labels = view.labels.copy(emptyTitle = "Where next?", emptySubtitle = "Choose a prompt")
-    measure(view, 390f.px)
+    for (width in listOf(320f, 768f, 1200f)) {
+      measure(view, width.px)
+      val buttons = (0 until group.childCount).map(group::getChildAt).filter { it.isClickable }
+      assertEquals(buttons[0].left, buttons[1].left)
+      assertEquals(buttons[0].width, buttons[1].width)
+      assertTrue(buttons[1].top >= buttons[0].bottom)
+    }
   }
 
   @Test fun typing_indicator_exposes_one_localized_progress_element_and_detaches_cleanly() = onMain {

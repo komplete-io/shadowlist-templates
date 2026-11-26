@@ -17,6 +17,7 @@ Pod::Spec.new do |s|
   s.swift_version = "5.9"
 
   s.dependency "ShadowListKit", "~> #{versions["shadowlist"]}"
+  s.dependency "EnrichedMarkdown", "= #{s.version}"
 
   # The C++ the Objective-C++ files call is the template logic in shadowlist-utils-core, which
   # compiles here and not in the ShadowListKit pod.

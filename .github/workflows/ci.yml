@@ -70,7 +70,6 @@ jobs:
       - name: Run core tests
         run: make test-core
 
-      # The fuzz tests run on one thread and are left out here. The step above runs them.
       - name: Run core tests (ThreadSanitizer)
         run: make test-core-tsan
 
@@ -104,6 +103,10 @@ jobs:
 
       - name: Typecheck the web example
         run: make typecheck-web
+
+      # The browser tests open the built example and fail in CI without it.
+      - name: Build the web example
+        run: yarn tsc -b examples/shadowlist-web-example
 
       # The browser tests use the runner's Google Chrome. CHROME_PATH picks another binary.
       - name: Run wasm utils tests
@@ -269,8 +272,11 @@ jobs:
         run: examples/shadowlist-appkit-example/build.sh mac
 
       # A development ShadowListKit pod has no copy under PODS_ROOT. SHADOWLIST_ROOT points the lint at the engine.
-      - name: Lint the podspec
-        run: pod lib lint ShadowListUtils.podspec --allow-warnings --include-podspecs=../shadowlist/ShadowListKit.podspec
+      - name: Lint the podspecs
+        run: |
+          pod lib lint EnrichedMarkdownCppShim.podspec --allow-warnings
+          pod lib lint EnrichedMarkdown.podspec --allow-warnings --include-podspecs=EnrichedMarkdownCppShim.podspec
+          pod lib lint ShadowListUtils.podspec --allow-warnings --include-podspecs=../shadowlist/ShadowListKit.podspec,EnrichedMarkdownCppShim.podspec,EnrichedMarkdown.podspec
 
   build-android-utils:
     runs-on: ubuntu-latest

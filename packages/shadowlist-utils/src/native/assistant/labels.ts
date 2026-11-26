@@ -9,6 +9,8 @@ export interface AssistantLabels {
   share: string;
   regenerate: string;
   retry: string;
+  resume: string;
+  resumeMessage: string;
   goodResponse: string;
   badResponse: string;
   previousVersion: string;
@@ -59,6 +61,8 @@ export const defaultAssistantLabels: AssistantLabels = {
   share: 'Share',
   regenerate: 'Regenerate',
   retry: 'Retry',
+  resume: 'Continue',
+  resumeMessage: 'The last reply did not finish.',
   goodResponse: 'Good response',
   badResponse: 'Bad response',
   previousVersion: 'Previous version',

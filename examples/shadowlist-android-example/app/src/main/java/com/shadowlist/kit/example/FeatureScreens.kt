@@ -55,7 +55,7 @@ class SectionsScreen(context: Context) : Screen, ShadowListKitListView.DataSourc
     list.delegate = this
     group(List(400) { Items.contact(Contact(it)) })
     list.reloadData()
-    if (LaunchArgs.get("SLScenario") == "sections") TouchScript(list).after(1500) { FeatureScenario.sections(this) }
+    if (LaunchArgs.get("SLScenario") == "sections") TouchScript(list).settled { FeatureScenario.sections(this) }
   }
 
   override fun headerMenu() = listOf(listOf(HeaderAction("Add Traveller", onPress = ::addTraveller)))
@@ -215,12 +215,13 @@ class InboxScreen(context: Context) : Screen, ShadowListKitListView.PrefetchData
     }
     list.items = messages
     if (Settings.selectDemo) {
-      list.postDelayed({
+      // Once the first rows show and hold still.
+      settled(list) {
         list.setEditing(true, false)
         list.selectedKeys = messages.subList(1, 3).mapTo(HashSet()) { it.key }
-      }, SELECT_DEMO_DELAY_MS)
+      }
     }
-    if (LaunchArgs.get("SLScenario") == "features") TouchScript(list).after(1500) { FeatureScenario.inbox(this) }
+    if (LaunchArgs.get("SLScenario") == "features") TouchScript(list).settled { FeatureScenario.inbox(this) }
   }
 
   private fun show(next: List<ShadowListUtilsInboxMessage>) {
@@ -265,9 +266,6 @@ class InboxScreen(context: Context) : Screen, ShadowListKitListView.PrefetchData
     cancelled += indices.size
   }
 
-  private companion object {
-    const val SELECT_DEMO_DELAY_MS = 1000L
-  }
 }
 
 // endregion
@@ -308,7 +306,7 @@ object FeatureScenario {
     var shift = 0
     for ((key, y) in before) after[key]?.let { shift = max(shift, abs(it - y)) }
     result.put("maxShiftAfterRegroup", shift)
-    script.after(300) { report(result) }
+    script.settled { report(result) }
   }
 
   fun inbox(screen: InboxScreen) {
@@ -348,7 +346,7 @@ object FeatureScenario {
     script.down(startX, y)
     script.frames(20, { frame -> script.move(startX - (frame + 1) * list.width / 18f, y) }) {
       script.up(startX - list.width * 1.1f, y)
-      script.after(600) {
+      script.settled {
         relayout(list)
         result.put("fullSwipeDeleted", screen.messages.size == count - 1 && screen.messages.none { it.key == swiped })
         partialSwipe(screen, result)
@@ -367,7 +365,7 @@ object FeatureScenario {
     script.down(40f, y)
     script.frames(8, { frame -> script.move(40f + (frame + 1) * 15.dpf, y) }) {
       script.up(40f + 120.dpf, y)
-      script.after(400) {
+      script.settled {
         result.put("swipeOpenOffset", (list.cellForItem(1)?.translationX ?: 0f) / density)
         list.closeSwipeActions(false)
         result.put("swipeClosedOffset", list.cellForItem(1)?.translationX ?: -1f)
@@ -386,9 +384,9 @@ object FeatureScenario {
     val y = row.centerY() + list.paddingTop - list.scrollY
     val before = screen.messages[4]
     script.down(list.width / 2f, y)
-    script.after(60) {
+    afterFrames(4) {
       script.up(list.width / 2f, y)
-      script.after(400) {
+      script.settled {
         result.put("tapPressed", screen.pressed).put("tapToggledRead", screen.messages[4].read != before.read)
         pullToRefresh(screen, result)
       }
@@ -405,8 +403,9 @@ object FeatureScenario {
       script.up(list.width / 2f, 340.dpf)
       result.put("refreshCalls", screen.refreshes)
       var before: Map<String, Int> = emptyMap()
-      script.after(800) { before = visibleItems(list) }
-      script.after(1800) {
+      script.settled { before = visibleItems(list) }
+      // The refresh ends on the screen's own simulated load.
+      script.settled({ !list.refreshing }) {
         val after = visibleItems(list)
         result.put("refreshShift", before.entries.maxOfOrNull { (key, y) -> after[key]?.let { abs(it - y) } ?: 0 } ?: -1)
         result.put("refreshingAfterDone", list.refreshing)
@@ -480,7 +479,8 @@ object FeatureScenario {
 
   private fun report(result: JSONObject) {
     android.util.Log.i("SLSCENARIO", result.toString())
-    if (exit) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 300)
+    // Log writes reach logd before it returns.
+    if (exit) android.os.Handler(android.os.Looper.getMainLooper()).post { android.os.Process.killProcess(android.os.Process.myPid()) }
   }
 }
 

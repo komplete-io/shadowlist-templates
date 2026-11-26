@@ -23,15 +23,25 @@ class ShadowListUtilsAssistantEmpty(context: Context, val theme: ShadowListUtils
     set(value) { field = value; requestLayout() }
   private val mark = TextView(context).apply {
     foreground = ShadowListUtilsSparkleIcon(theme.colors.onAccent, 28f)
-    background = GradientDrawable().apply { setColor(theme.colors.accent); cornerRadius = 28f.pxf }
+    background = GradientDrawable().apply { setColor(theme.colors.accent); cornerRadius = theme.radius.pill.pxf }
   }
   private val title = TextView(context).apply { gravity = Gravity.CENTER; if (android.os.Build.VERSION.SDK_INT >= 28) isAccessibilityHeading = true }
   private val subtitle = TextView(context).apply { gravity = Gravity.CENTER }
+  private val rows = object : ViewGroup(context) {
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+      setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
+    }
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {}
+  }.apply {
+    background = GradientDrawable().apply { setColor(theme.colors.elevated); cornerRadius = theme.grouped.radius.pxf }
+    clipToOutline = true
+  }
+  private val separators = mutableListOf<View>()
   private val buttons = mutableListOf<LinearLayout>()
   private val frames = LinkedHashMap<View, Rect>()
-  init { addView(mark); addView(title); addView(subtitle) }
+  init { addView(rows); addView(mark); addView(title); addView(subtitle) }
   private fun rebuildSuggestions() {
-    buttons.forEach(::removeView); buttons.clear()
+    rows.removeAllViews(); buttons.clear(); separators.clear()
     for (suggestion in suggestions) {
       val button = object : LinearLayout(context) {
         override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo) {
@@ -47,7 +57,7 @@ class ShadowListUtilsAssistantEmpty(context: Context, val theme: ShadowListUtils
         }
         val cardPrompt = TextView(context).apply {
           importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-          text = suggestion.prompt
+          text = suggestion.description ?: suggestion.prompt
           maxLines = 2
           ellipsize = android.text.TextUtils.TruncateAt.END
           theme.typography.footnote.applyTo(this, theme.colors.secondaryLabel)
@@ -57,14 +67,17 @@ class ShadowListUtilsAssistantEmpty(context: Context, val theme: ShadowListUtils
         val inset = floor(theme.spacing.md.pxf).toInt()
         val promptTop = floor((theme.spacing.md + theme.spacing.xxs).pxf).toInt() - inset
         addView(cardPrompt, LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = promptTop })
-        setPadding(inset, inset, (2 * theme.spacing.md).px - inset, cardInsets.roundToInt() - inset - promptTop)
-        background = GradientDrawable().apply { setColor(theme.colors.elevated); cornerRadius = theme.radius.md.pxf }
-        contentDescription = suggestion.title + ". " + suggestion.prompt
+        setPadding(theme.grouped.rowInset.px, inset, theme.grouped.rowInset.px, cardInsets.roundToInt() - inset - promptTop)
+        minimumHeight = theme.grouped.rowHeight.px
+        setBackgroundColor(theme.colors.elevated)
+        contentDescription = suggestion.title + ". " + (suggestion.description ?: suggestion.prompt)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         isEnabled = onSelectSuggestion != null
         setOnClickListener { onSelectSuggestion?.invoke(suggestion) }
       }
-      buttons.add(button); addView(button)
+      buttons.add(button); rows.addView(button)
+      val separator = View(context).apply { setBackgroundColor(theme.colors.separator) }
+      separators.add(separator); rows.addView(separator)
     }
     requestLayout()
   }
@@ -81,7 +94,8 @@ class ShadowListUtilsAssistantEmpty(context: Context, val theme: ShadowListUtils
     val spacing = theme.spacing
     val inset = spacing.lg.px
     val inner = (width - 2 * inset).coerceAtLeast(1)
-    val markSize = MARK_SIZE_DP.px
+    val markSizeDp = theme.tapTarget + spacing.md
+    val markSize = markSizeDp.px
     title.text = labels.emptyTitle; subtitle.text = labels.emptySubtitle
     theme.typography.title2.applyTo(title, theme.colors.label)
     theme.typography.subhead.applyTo(subtitle, theme.colors.secondaryLabel)
@@ -90,10 +104,10 @@ class ShadowListUtilsAssistantEmpty(context: Context, val theme: ShadowListUtils
     title.measure(exactInner, unbounded)
     subtitle.measure(exactInner, unbounded)
     frames.clear()
-    var y = PADDING_TOP_DP.pxf
+    var y = spacing.xxl.pxf
     val markLeft = ((width - markSize) / 2f).roundToInt()
     frames[mark] = Rect(markLeft, y.roundToInt(), markLeft + markSize, y.roundToInt() + markSize)
-    y += (MARK_SIZE_DP + spacing.lg).pxf
+    y += (markSizeDp + spacing.lg).pxf
     frames[title] = Rect(inset, floor(y).toInt(), width - inset, floor(y).toInt() + title.measuredHeight)
     y += title.measuredHeight
     subtitle.visibility = if (labels.emptySubtitle.isEmpty()) GONE else VISIBLE
@@ -102,28 +116,21 @@ class ShadowListUtilsAssistantEmpty(context: Context, val theme: ShadowListUtils
       frames[subtitle] = Rect(inset, floor(y).toInt(), width - inset, floor(y).toInt() + subtitle.measuredHeight)
       y += subtitle.measuredHeight
     }
+    rows.visibility = if (buttons.isEmpty()) GONE else VISIBLE
     if (buttons.isNotEmpty()) {
       y += spacing.xxl.pxf
-      val gridTop = y.roundToInt()
-      val columns = if (resources.configuration.fontScale > 1.4f || inner < 240f.px) 1 else 2
-      val cardWidth = (inner - (columns - 1) * spacing.sm.pxf) / columns
-      var rowTop = 0f
-      for (row in buttons.chunked(columns)) {
-        val lefts = row.indices.map { (it * (cardWidth + spacing.sm.pxf)).roundToInt() }
-        val rights = row.indices.map { (it * (cardWidth + spacing.sm.pxf) + cardWidth).roundToInt() }
-        row.forEachIndexed { index, button ->
-          button.measure(MeasureSpec.makeMeasureSpec(rights[index] - lefts[index], MeasureSpec.EXACTLY), unbounded)
-        }
-        val height = row.maxOf { it.measuredHeight } - cardInsets.roundToInt() + cardInsets
-        val top = gridTop + rowTop.roundToInt()
-        val bottom = gridTop + (rowTop + height).roundToInt()
-        row.forEachIndexed { index, button ->
-          val start = if (layoutDirection == LAYOUT_DIRECTION_RTL) inner - rights[index] else lefts[index]
-          frames[button] = Rect(inset + start, top, inset + start + rights[index] - lefts[index], bottom)
-        }
-        rowTop += height + spacing.sm.pxf
+      val rowsTop = y.roundToInt()
+      for ((index, button) in buttons.withIndex()) {
+        if (index > 0) y += ShadowListUtilsTheme.HAIRLINE_PX
+        button.measure(exactInner, unbounded)
+        val top = y.roundToInt() - rowsTop
+        val height = button.measuredHeight
+        frames[button] = Rect(0, top, inner, top + height)
+        separators[index].visibility = if (index == 0) GONE else VISIBLE
+        frames[separators[index]] = Rect(0, top - ShadowListUtilsTheme.HAIRLINE_PX, inner, top)
+        y += height
       }
-      y += rowTop - spacing.sm.pxf
+      frames[rows] = Rect(inset, rowsTop, width - inset, y.roundToInt())
     }
     return (y + spacing.xxl.pxf).roundToInt()
   }
@@ -141,8 +148,4 @@ class ShadowListUtilsAssistantEmpty(context: Context, val theme: ShadowListUtils
     for ((view, frame) in frames) view.layout(frame.left, frame.top, frame.right, frame.bottom)
   }
 
-  private companion object {
-    const val PADDING_TOP_DP = 48f
-    const val MARK_SIZE_DP = 56f
-  }
 }

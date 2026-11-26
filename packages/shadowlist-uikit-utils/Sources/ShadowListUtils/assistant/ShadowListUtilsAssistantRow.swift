@@ -3,7 +3,7 @@ import UIKit
 /*
  * The immutable transcript row snapshot. UI callbacks and expansion updates stay on the owner.
  */
-struct ShadowListUtilsAssistantRow: ShadowListUtilsRow {
+struct ShadowListUtilsAssistantRow: ShadowListUtilsRow, ShadowListUtilsMainThreadRow {
   let item: ShadowListUtilsAssistantMessage
   let turn: ShadowListUtilsAssistantTurn?
   let busy: Bool
@@ -34,7 +34,7 @@ struct ShadowListUtilsAssistantRow: ShadowListUtilsRow {
     self.handlers = handlers
     self.onActionsChange = onActionsChange
     self.onExpansionChange = onExpansionChange
-    // Resolve application formatters now, before the list may prefetch layouts on another thread.
+    // Resolve application formatters when capturing the row snapshot.
     var frozen = labels
     if case let .assistant(reply) = item {
       let current = ShadowListUtilsAssistantReplyMessage.resolvedTurn(message: reply, live: turn)

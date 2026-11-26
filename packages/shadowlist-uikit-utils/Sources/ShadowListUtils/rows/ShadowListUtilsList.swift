@@ -29,7 +29,7 @@ open class ShadowListUtilsList: ShadowListKitListView {
   public var onStartReached: (() -> Void)?
 
   /*
-   * Setting a closure turns pull to refresh on, and nil turns it off. Set the kit's refreshing
+   * Setting a closure turns pull to refresh on, and nil turns it off. Set the kit's isRefreshing
    * back to false when the refresh is done.
    */
   public var onRefresh: (() -> Void)? {
@@ -127,12 +127,17 @@ open class ShadowListUtilsList: ShadowListKitListView {
   public func setRows(_ rows: [ShadowListUtilsRow], animated: Bool = false) {
     let previous = self.rows
     self.rows = rows
-    layoutCache.prune(keeping: Set((rows + (adapter?.headerRows ?? [])).map(\.key)))
     let animates = animatesChanges
     animatesChanges = animated
-    if let inserted = insertedIndices(from: previous, to: rows) {
-      insertItems(at: inserted)
-    } else {
+    // One run inserted or deleted touches the cache's layouts of that run alone.
+    switch runChange(from: previous, to: rows) {
+    case .inserted(let indices):
+      insertItems(at: indices)
+    case .deleted(let indices):
+      indices.forEach { layoutCache.invalidate(previous[$0].key) }
+      deleteItems(at: indices)
+    case nil:
+      layoutCache.prune(keeping: Set((rows + (adapter?.headerRows ?? [])).map(\.key)))
       applyChanges()
     }
     animatesChanges = animates
@@ -141,33 +146,37 @@ open class ShadowListUtilsList: ShadowListKitListView {
   }
 
   /*
-   * Stores rows the kit already holds in this order, like after a drop.
+   * A change that only inserts one run of rows or only deletes one, anywhere, with every other
+   * row unchanged.
    */
-  func replaceRows(_ rows: [ShadowListUtilsRow]) {
-    self.rows = rows
+  private enum RunChange {
+    case inserted(IndexSet)
+    case deleted(IndexSet)
   }
 
   /*
-   * Where the new rows sit when the rows before are all still there, unchanged and in one run
-   * at the start or the end: a pure append or prepend, which needs no diff. nil for any other
-   * change, and for a list with sections, whose counts change with the rows.
+   * The run that changed when the rows before and after agree, key and content version, up to
+   * it from the start and after it to the end: an append, a prepend, or one run inserted or
+   * deleted in the middle, which needs no diff. nil for any other change, and for a list with
+   * sections, whose counts change with the rows.
    */
-  private func insertedIndices(from previous: [ShadowListUtilsRow], to rows: [ShadowListUtilsRow]) -> IndexSet? {
-    guard !previous.isEmpty, rows.count > previous.count, adapter?.headerRows.isEmpty != false else { return nil }
-    let added = rows.count - previous.count
-    func matches(offset: Int) -> Bool {
-      for index in previous.indices {
-        let row = rows[index + offset]
-        if row.key != previous[index].key || row.contentVersion != previous[index].contentVersion {
-          return false
-        }
-      }
-      return true
+  private func runChange(from previous: [ShadowListUtilsRow], to rows: [ShadowListUtilsRow]) -> RunChange? {
+    guard !previous.isEmpty, !rows.isEmpty, rows.count != previous.count, adapter?.headerRows.isEmpty != false else { return nil }
+    func same(_ a: ShadowListUtilsRow, _ b: ShadowListUtilsRow) -> Bool {
+      a.key == b.key && a.contentVersion == b.contentVersion
     }
-    if matches(offset: 0) {
-      return IndexSet(integersIn: previous.count..<rows.count)
+    let shorter = min(previous.count, rows.count)
+    var head = 0
+    while head < shorter, same(previous[head], rows[head]) {
+      head += 1
     }
-    return matches(offset: added) ? IndexSet(integersIn: 0..<added) : nil
+    var tail = 0
+    while tail < shorter - head, same(previous[previous.count - 1 - tail], rows[rows.count - 1 - tail]) {
+      tail += 1
+    }
+    guard head + tail == shorter else { return nil }
+    return rows.count > previous.count
+      ? .inserted(IndexSet(integersIn: head..<rows.count - tail)) : .deleted(IndexSet(integersIn: head..<previous.count - tail))
   }
 
   /*
@@ -292,7 +301,10 @@ open class ShadowListUtilsList: ShadowListKitListView {
       guard self.itemCrossSize > 0 else { return }
       let range = self.visibleRange
       self.prefetchOffset = self.offsetAlong
-      self.layoutCache.prefetch(self.rows, width: self.itemCrossSize, around: range.location == NSNotFound ? 0 : range.location)
+      let viewport = self.isHorizontal ? self.bounds.width : self.bounds.height
+      self.layoutCache.prefetch(
+        self.rows, width: self.itemCrossSize, around: range.location == NSNotFound ? 0 : range.location,
+        extent: viewport > 0 ? viewport * Self.prefetchViewports : .infinity)
     }
   }
 
@@ -309,6 +321,13 @@ open class ShadowListUtilsList: ShadowListKitListView {
   }
 
   private static let generationShift = 32
+
+  /*
+   * How far ahead and behind the viewport the layout cache lays rows out, in viewports. At 8000
+   * points a second a fling covers it in about 0.7 seconds on a phone, and the prefetch starts
+   * again every half viewport.
+   */
+  static let prefetchViewports: CGFloat = 8
 }
 
 // MARK: - Items

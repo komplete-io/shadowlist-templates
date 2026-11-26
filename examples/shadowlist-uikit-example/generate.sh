@@ -11,4 +11,11 @@ ROOT="${SHADOWLIST_ROOT:-$HERE/../../../shadowlist}"
 }
 # XcodeGen nests the groups of an absolute path under this folder. The path goes in relative.
 export SHADOWLIST_ROOT="$(python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$(cd "$ROOT" && pwd)" "$HERE")"
+# SHADOWRULER_ROOT=<shadowruler checkout> links ShadowRuler for -SLRuler 1, see RulerCapture.swift.
+if [[ -n "${SHADOWRULER_ROOT:-}" ]]; then
+  export SHADOWRULER_ROOT="$(python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$(cd "$SHADOWRULER_ROOT" && pwd)" "$HERE")"
+  export SHADOWRULER_ENABLED=YES
+else
+  export SHADOWRULER_ENABLED=NO
+fi
 cd "$HERE" && xcodegen generate --quiet

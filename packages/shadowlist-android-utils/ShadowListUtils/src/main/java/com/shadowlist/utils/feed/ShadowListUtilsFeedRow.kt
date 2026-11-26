@@ -301,8 +301,11 @@ class ShadowListUtilsFeedRowView(context: Context) :
    */
   private fun placeStrip(feed: ShadowListUtilsFeedRow, frames: ShadowListUtilsFeedRowLayout) {
     val gap = feed.theme.spacing.xs.px
+    /*
+     * The content holds a gap before the first image and after the last, and the strip starts a gap
+     * before the text column. At rest at either end the outer image lines up with the text.
+     */
     val contentWidth = frames.stripImageFrames.size * (ShadowListUtilsFeedRow.STRIP_IMAGE_WIDTH_DP.px + 2 * gap)
-    strip.setPadding(gap, 0, gap, 0)
     stripContent.minimumWidth = contentWidth
     for ((view, frame) in stripImages.zip(frames.stripImageFrames)) {
       val params = view.layoutParams as FrameLayout.LayoutParams
@@ -315,7 +318,7 @@ class ShadowListUtilsFeedRowView(context: Context) :
     strip.place(frames.stripFrame)
     if (stripKey == feed.key) return
     stripKey = feed.key
-    val end = (contentWidth + 2 * gap - frames.stripFrame.width()).coerceAtLeast(0)
+    val end = (contentWidth - frames.stripFrame.width()).coerceAtLeast(0)
     strip.scrollTo(if (ShadowListUtilsPlatform.isRightToLeft) end else 0, 0)
   }
 

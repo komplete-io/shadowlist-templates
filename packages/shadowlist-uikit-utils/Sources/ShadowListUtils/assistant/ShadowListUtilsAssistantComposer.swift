@@ -64,7 +64,7 @@ public final class ShadowListUtilsAssistantComposer: UIView {
     input.showsSendButton = false
     input.useEmbeddedAppearance()
     field.backgroundColor = theme.colors.elevated
-    field.layer.cornerRadius = theme.radius.xl
+    field.layer.cornerRadius = theme.radius.lg + theme.spacing.xs
     field.layer.borderWidth = ShadowListUtilsTheme.hairline
     field.layer.borderColor = theme.colors.separator.cgColor
     addSubview(field)
@@ -97,9 +97,11 @@ public final class ShadowListUtilsAssistantComposer: UIView {
     toolbar.alignment = .center
     toolbar.spacing = theme.spacing.xs
     toolbar.isLayoutMarginsRelativeArrangement = true
-    toolbar.layoutMargins = UIEdgeInsets(top: 0, left: theme.spacing.xs + 2, bottom: theme.spacing.xs + 2, right: theme.spacing.xs + 2)
+    toolbar.layoutMargins = UIEdgeInsets(top: 0, left: theme.spacing.xs, bottom: theme.spacing.xs, right: theme.spacing.xs)
     [attach, modelButton, thinkingButton, spacer, dictate, primary].forEach(toolbar.addArrangedSubview)
     attach.setImage(ShadowListUtilsPlusIcon.image(size: 18), for: .normal)
+    attach.layer.cornerRadius = theme.radius.lg
+    dictate.layer.cornerRadius = theme.radius.lg
     attach.tintColor = theme.colors.label
     attach.addAction(UIAction { [weak self] _ in self?.onPressAttach?() }, for: .touchUpInside)
     modelButton.addAction(UIAction { [weak self] _ in self?.onPressModel?() }, for: .touchUpInside)
@@ -193,7 +195,7 @@ public final class ShadowListUtilsAssistantComposer: UIView {
     primary.isEnabled = showStop ? onStop != nil : onSend != nil && hasDraft && (!streaming || sendWhileStreaming)
     primary.tintColor = showStop ? theme.colors.background : primary.isEnabled ? theme.colors.label : theme.colors.secondaryLabel
     primary.backgroundColor = showStop ? theme.colors.label : primary.isEnabled ? theme.colors.accent : theme.colors.fill
-    primary.layer.cornerRadius = 16
+    primary.layer.cornerRadius = theme.radius.lg
   }
 
   private func updateToolbar() {
@@ -209,7 +211,7 @@ public final class ShadowListUtilsAssistantComposer: UIView {
     modelButton.contentHorizontalAlignment = .left
     modelButton.imageEdgeInsets = UIEdgeInsets(top: 0, left: theme.spacing.xs, bottom: 0, right: -theme.spacing.xs)
     modelButton.backgroundColor = theme.colors.fill
-    modelButton.layer.cornerRadius = 15
+    modelButton.layer.cornerRadius = theme.radius.lg
     modelButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: theme.spacing.md, bottom: 0, right: theme.spacing.md + (onPressModel == nil ? 0 : theme.spacing.xs))
     modelButton.accessibilityLabel = model.map(labels.model)
     modelButton.isEnabled = onPressModel != nil
@@ -218,7 +220,7 @@ public final class ShadowListUtilsAssistantComposer: UIView {
     thinkingButton.setAttributedTitle(thinkingTitle, for: .normal)
     thinkingWidth.constant = pillWidth(thinkingTitle)
     thinkingButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: theme.spacing.md, bottom: 0, right: theme.spacing.md)
-    thinkingButton.layer.cornerRadius = 15
+    thinkingButton.layer.cornerRadius = theme.radius.lg
     thinkingButton.backgroundColor = thinking ? theme.colors.accentSoft : theme.colors.fill
     thinkingButton.accessibilityLabel = labels.thinkingToggleDescription
     thinkingButton.accessibilityTraits = thinking ? [.button, .selected] : .button

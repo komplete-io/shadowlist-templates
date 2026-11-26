@@ -19,9 +19,28 @@ function fakeStore() {
   return { store, writes, turn: () => turns.get('m1') };
 }
 
+/*
+ * The node test environment has no frames. A frame here is a 16 ms fake timer, as in React
+ * Native's own jest setup.
+ */
+const frameGlobals = globalThis as unknown as {
+  requestAnimationFrame?: (callback: (now: number) => void) => number;
+  cancelAnimationFrame?: (handle: number) => void;
+};
+
 describe('createTurnWriter', () => {
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(() => jest.useRealTimers());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    frameGlobals.requestAnimationFrame = (callback) =>
+      setTimeout(() => callback(Date.now()), 16) as unknown as number;
+    frameGlobals.cancelAnimationFrame = (handle) =>
+      clearTimeout(handle as unknown as ReturnType<typeof setTimeout>);
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+    delete frameGlobals.requestAnimationFrame;
+    delete frameGlobals.cancelAnimationFrame;
+  });
 
   it('batches tokens into one write per flush', () => {
     const { store, writes, turn } = fakeStore();

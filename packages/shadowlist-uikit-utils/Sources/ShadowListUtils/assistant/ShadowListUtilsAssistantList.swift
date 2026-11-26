@@ -74,7 +74,8 @@ public final class ShadowListUtilsAssistantList: ShadowListUtilsList {
           guard let self else { return }
           if expanded { self.thinkingExpandedKeys.insert(key) } else { self.thinkingExpandedKeys.remove(key) }
           self.expandedToolKeys[key] = toolKeys
-          self.rebuildRows()
+          // Also called when an upstream image changes its fitted height without changing text.
+          self.reloadRows()
         })
     }
   }

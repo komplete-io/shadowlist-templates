@@ -87,15 +87,6 @@ void appendUtf8(std::string& text, char32_t codePoint) {
   }
 }
 
-std::size_t lengthUtf16(std::string_view text) {
-  std::size_t length = 0;
-  std::size_t offset = 0;
-  while (offset < text.size()) {
-    length += decodeUtf8(text, offset) >= ASTRAL_FIRST ? 2 : 1;
-  }
-  return length;
-}
-
 std::string_view trimStart(std::string_view text) {
   std::size_t offset = 0;
   while (offset < text.size()) {

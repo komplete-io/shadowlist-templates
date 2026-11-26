@@ -137,7 +137,7 @@ enum Scenario {
     let steps = 30
     var step = 0
     screen.list.scrollPhase = .dragging
-    Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { timer in
+    FrameTicker.start(on: screen) { timer in
       step += 1
       let progress = CGFloat(step) / CGFloat(steps)
       screen.scroll(to: CGPoint(x: 160 * progress, y: 900 * progress))
@@ -162,7 +162,7 @@ enum Scenario {
     var target = 0
     var targetKey = ""
     list.scrollPhase = .dragging
-    Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { timer in
+    FrameTicker.start(on: list) { timer in
       frame += 1
       switch frame {
       case 1...60:
@@ -312,7 +312,7 @@ enum Scenario {
       })
 
     var index = 0
-    Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { timer in
+    FrameTicker.start(on: list) { timer in
       guard index < steps.count else {
         timer.invalidate()
         finish(result)
@@ -422,7 +422,7 @@ enum Scenario {
       result["pass"] = checks.values.allSatisfy { $0 }
       finish(result, shoot: screen)
     }
-    run(steps)
+    run(steps, on: list)
   }
 
   /*
@@ -467,7 +467,7 @@ enum Scenario {
         finish(result, shoot: screen)
       },
     ]
-    run(steps)
+    run(steps, on: list)
   }
 
   /*
@@ -548,15 +548,15 @@ enum Scenario {
         finish(result, shoot: screen)
       },
     ]
-    run(steps)
+    run(steps, on: list)
   }
 
   /*
-   * Run steps one frame apart, each laid out after.
+   * Run steps one display frame apart, each laid out after.
    */
-  private static func run(_ steps: [() -> Void]) {
+  private static func run(_ steps: [() -> Void], on view: NSView) {
     var index = 0
-    Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { timer in
+    FrameTicker.start(on: view) { timer in
       guard index < steps.count else {
         timer.invalidate()
         return
@@ -628,8 +628,15 @@ enum Scenario {
         return (title, cell)
       }
     }
+    /*
+     * The pinned header: the screen's overlay banner, or a header row the list pinned itself.
+     */
     func pinned() -> (title: String, offset: Double)? {
-      titleCells().first { $0.cell.layer?.zPosition == 1 }.map { ($0.title, Double(list.convert($0.cell.frame, from: $0.cell.superview).minY)) }
+      if let banner = list.subviews.first!.subviews.first(where: { $0 is BannerView && $0.layer?.zPosition == 2 }) {
+        let title = banner.subviews.compactMap { ($0 as? NSTextField)?.stringValue }.first ?? ""
+        return (String(title.prefix { $0 != " " }), Double(list.convert(banner.frame, from: banner.superview).minY))
+      }
+      return titleCells().first { $0.cell.layer?.zPosition == 1 }.map { ($0.title, Double(list.convert($0.cell.frame, from: $0.cell.superview).minY)) }
     }
     result["numberOfSections"] = list.numberOfSections
     let third = list.firstItemIndexInSection(3)
@@ -651,7 +658,9 @@ enum Scenario {
     list.contentOffset = CGPoint(x: 0, y: list.rectForHeader(inSection: 6).minY - 10)
     layout()
     result["pushedHeaderOffset"] = pinned()?.offset ?? NSNull()
-    result["pushedHeaderExpected"] = Double(10 - list.rectForHeader(inSection: 5).height)
+    // The pinned view is the overlay banner when the screen draws one, and it is the one pushed.
+    let banner = list.subviews.first!.subviews.first { $0 is BannerView && $0.layer?.zPosition == 2 }
+    result["pushedHeaderExpected"] = Double(10 - (banner?.frame.height ?? list.rectForHeader(inSection: 5).height))
     // A rubber band past the start pins nothing and the first header goes with the content.
     list.scrollPhase = .dragging
     list.contentOffset = CGPoint(x: 0, y: -40)
@@ -897,7 +906,7 @@ enum Scenario {
         finish(result, shoot: screen)
       }
     ]
-    run(steps)
+    run(steps, on: list)
   }
 
   /*
@@ -993,5 +1002,39 @@ enum Scenario {
       }
     }
     return rows
+  }
+}
+
+/*
+ * Calls its body on every display frame of a view, at 60 frames a second, until invalidated.
+ * The scenarios step on it where they need one step a frame.
+ */
+final class FrameTicker: NSObject {
+  private let body: (FrameTicker) -> Void
+  private var link: CADisplayLink?
+
+  private init(_ body: @escaping (FrameTicker) -> Void) {
+    self.body = body
+  }
+
+  @discardableResult
+  static func start(on view: NSView, _ body: @escaping (FrameTicker) -> Void) -> FrameTicker {
+    let ticker = FrameTicker(body)
+    let link = view.displayLink(target: ticker, selector: #selector(tick))
+    link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
+    // Not in the event tracking mode: a step that clicks a button runs that mode, and a frame
+    // inside it would run the next step before this one returns.
+    link.add(to: .main, forMode: .default)
+    ticker.link = link
+    return ticker
+  }
+
+  @objc private func tick() {
+    body(self)
+  }
+
+  func invalidate() {
+    link?.invalidate()
+    link = nil
   }
 }

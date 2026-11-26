@@ -371,7 +371,7 @@ final class SectionsScreen: NSView, ListScreen, ShadowListKitListViewDataSource,
     list.renderStickyHeaderOverlay = { [weak self] _, _, section in
       guard let self, self.sections.indices.contains(section) else { return nil }
       let data = self.sections[section]
-      return BannerView("\(data.letter) · \(data.contacts.count) travellers")
+      return BannerView("\(data.letter) · \(data.contacts.count) travellers", solid: true)
     }
     list.showsSeparators = true
     list.separatorInsetStart = 68

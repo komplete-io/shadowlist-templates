@@ -13,7 +13,6 @@ import {
 } from './FixtureStrings.js';
 
 /*
- * The example data, item for item the same as the UIKit and Android examples' fixtures.
  * Every value is a pure function of the item's generation index.
  */
 export function avatarColor(name: string): string {

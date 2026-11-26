@@ -333,18 +333,22 @@ final class ContactCell: ShadowListKitListCell {
 }
 
 /*
- * A line of text the list shows as its header or footer view, 44 points tall.
+ * A line of text the list shows as its header or footer view, 44 points tall. A solid banner
+ * is opaque and hides the rows that scroll under it.
  */
 final class BannerView: NSView {
   private let label = NSTextField(labelWithString: "")
+  private let solid: Bool
 
   var text: String {
     get { label.stringValue }
     set { label.stringValue = newValue }
   }
 
-  init(_ text: String) {
+  init(_ text: String, solid: Bool = false) {
+    self.solid = solid
     super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 44))
+    wantsLayer = solid
     label.stringValue = text
     label.font = .systemFont(ofSize: 12)
     label.textColor = .secondaryLabelColor
@@ -353,6 +357,12 @@ final class BannerView: NSView {
   }
 
   required init?(coder: NSCoder) { fatalError() }
+
+  override var wantsUpdateLayer: Bool { solid }
+
+  override func updateLayer() {
+    layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+  }
 
   override func resizeSubviews(withOldSize oldSize: NSSize) {
     label.frame = NSRect(x: 16, y: (bounds.height - 16) / 2, width: max(0, bounds.width - 32), height: 16)

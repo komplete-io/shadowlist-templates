@@ -6,10 +6,13 @@ public struct ShadowListUtilsAssistantLabels {
   public var copy: String = "Copy"
   public var copied: String = "Copied"
   public var copyCode: String = "Copy code"
+  @available(*, deprecated, message: "Has no effect on UIKit: the Markdown renderer names code languages itself.")
   public var codeLanguageFallback: String = "code"
   public var share: String = "Share"
   public var regenerate: String = "Regenerate"
   public var retry: String = "Retry"
+  public var resume: String = "Continue"
+  public var resumeMessage: String = "The last reply did not finish."
   public var goodResponse: String = "Good response"
   public var badResponse: String = "Bad response"
   public var previousVersion: String = "Previous version"

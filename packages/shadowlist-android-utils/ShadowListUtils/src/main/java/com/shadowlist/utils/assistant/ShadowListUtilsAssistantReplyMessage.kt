@@ -56,6 +56,7 @@ class ShadowListUtilsAssistantReplyMessage(
   internal var thinkingExpanded = false
   internal var expandedToolKeys = emptySet<String>()
   internal var onLayoutChange: (() -> Unit)? = null
+  internal var onMarkdownHeightChange: (() -> Unit)? = null
   private val header = ShadowListKitTextView(context)
   private val sections = LinkedHashMap<String, View>()
   private val actionsScroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false }
@@ -180,9 +181,9 @@ class ShadowListUtilsAssistantReplyMessage(
         }.also(::addView)
       }
       if (section is Section.Markdown) (view as ShadowListUtilsAssistantMarkdown).apply {
-        text = section.text
-        streaming = section.streaming
+        update(section.text, section.streaming)
         if (this.labels != this@ShadowListUtilsAssistantReplyMessage.labels) this.labels = this@ShadowListUtilsAssistantReplyMessage.labels
+        onHeightChange = { requestLayout(); this@ShadowListUtilsAssistantReplyMessage.onMarkdownHeightChange?.invoke() }
         onCopyCode = this@ShadowListUtilsAssistantReplyMessage.onCopyCode
         onOpenLink = this@ShadowListUtilsAssistantReplyMessage.onOpenLink
         measure(MeasureSpec.makeMeasureSpec(section.frame.width(), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(section.frame.height(), MeasureSpec.EXACTLY))
@@ -200,7 +201,7 @@ class ShadowListUtilsAssistantReplyMessage(
     val current = resolvedTurn(message, turn)
     when (action) {
       Action.COPY -> {
-        onCopy?.invoke(current.content); copied = true; handler.removeCallbacks(resetCopied); handler.postDelayed(resetCopied, 1500); requestLayout()
+        onCopy?.invoke(current.content); copied = true; handler.removeCallbacks(resetCopied); handler.postDelayed(resetCopied, COPIED_DURATION_MS); requestLayout()
       }
       Action.SHARE -> onShare?.invoke(current.content)
       Action.REGENERATE -> if (!busy) onRegenerate?.invoke(message.key)
@@ -221,6 +222,12 @@ class ShadowListUtilsAssistantReplyMessage(
 
 
   companion object {
+    /*
+     * How long a copy button, of a reply or of a code block, says it copied before it reads Copy
+     * again.
+     */
+    internal const val COPIED_DURATION_MS = 1500L
+
     internal fun resolvedTurn(message: ShadowListUtilsAssistantReply, live: ShadowListUtilsAssistantTurn?): ShadowListUtilsAssistantTurn =
       live ?: message.variants.getOrNull(message.variantIndex) ?: ShadowListUtilsAssistantTurn(status = ShadowListUtilsAssistantTurnStatus.Done())
 
@@ -267,10 +274,8 @@ class ShadowListUtilsAssistantReplyMessage(
       for ((index, step) in steps.withIndex()) when (step) {
         is ShadowListUtilsAssistantStep.Text -> {
           val running = streaming && index == steps.lastIndex
-          val blocks = ShadowListUtilsCore.parseMarkdown(step.text)
-          var height = blocks.sumOf { ShadowListUtilsAssistantMarkdownBlock.layout(it, inner, theme).heightPx + spacing.md.px }
-          if (running) height += 6f.px + spacing.md.px
-          height = (height - spacing.md.px).coerceAtLeast(0)
+          var height = ShadowListUtilsAssistantMarkdownHeights.height(step.text, running, inner, theme)
+          if (running) height += 6f.px + if (height > 0) spacing.md.px else 0
           sections.add(Section.Markdown("text-${step.at}", step.text, running, direction.place(Rect(x, y, x + inner, y + height))))
           y += height + spacing.md.px
         }

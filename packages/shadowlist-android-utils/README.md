@@ -33,8 +33,17 @@ Maven Central at `SHADOWLIST_KIT_VERSION` in `ShadowListUtils/gradle.properties`
 
 The AAR ships `libshadowlistutils.so` with the C++ runtime linked statically, aligned for 16 KB pages. It holds the
 template logic the platforms share. The list core stays in the kit's `libshadowlistkit.so`.
-`./gradlew :ShadowListUtils:publishToMavenLocal` installs the current checkout as `io.github.azimgd:shadowlist-utils`
-with `VERSION_NAME` from `ShadowListUtils/gradle.properties`.
+The assistant Markdown renderer is vendored in `../enriched-markdown-android`, with provenance and local patches
+listed there. Its parser and UI AARs are transitive dependencies of `shadowlist-utils`. The parser uses fbjni and
+`libc++_shared.so`; the existing utility and kit libraries keep their static C++ runtimes.
+To publish all three template artifacts locally, run:
+
+```sh
+./gradlew :enriched-markdown-android:parser:publishToMavenLocal :enriched-markdown-android:ui:publishToMavenLocal :ShadowListUtils:publishToMavenLocal
+```
+
+All three use `VERSION_NAME` from `ShadowListUtils/gradle.properties` and the `io.github.azimgd` group (or JitPack's
+group and tag in JitPack builds). Maven Central releases must also publish all three artifacts.
 
 ### Building from source
 
@@ -144,8 +153,13 @@ list.labels = ShadowListUtilsChatLabels(failed = "Nicht zugestellt. Tippen zum W
 
 ### Rows
 
-A row is the model of what one cell shows. Its layout is a pure function of the row and a width, safe off the UI
-thread, and its view only copies the frames the layout holds. The template lists build their rows from items. A
+Assistant Markdown uses EnrichedMarkdown's asynchronous parser and native view measurement. Background row
+layout uses a bounded cache of measured heights, with a plain-text estimate before the first render. When the
+render or an image changes height, the assistant invalidates that row and updates the list's size. Streaming tails
+use the shared C++ filter and repair; LaTeX rendering and syntax highlighting are not included.
+
+A row is the model of what one cell shows. Its layout is safe off the UI thread and supplies the frames its view
+uses. The template lists build their rows from items. A
 `ShadowListUtilsList` takes rows directly, of the library's or of the app's own.
 
 | API | Notes |
@@ -186,8 +200,6 @@ its text parts. A frame of a part the row lacks is empty.
 | `ShadowListUtilsSpinner(context, size, color, theme)` | Centered activity indicator. |
 | `ShadowListUtilsRedactedText.bars(layout, lineHeightPx)` | One bar per line of a text layout that holds text, as wide as the line's text, for a placeholder row. |
 | `ShadowListUtilsEmptyState(context, title, message, icon, theme)` | What a screen says before it has anything to show. |
-
-Every primitive view has a settable `theme`.
 
 ### Masonry
 
@@ -365,7 +377,7 @@ stay in the application model; action callbacks request changes. A live turn ove
 The `.endMarker` message remains a one-dp row excluded from anchoring. The list defaults to inverted layout,
 following appends and dismissing the keyboard on drag. `rowForItem` replaces a default transcript row.
 
-`ShadowListUtilsAssistantReplyMessage` renders shared Markdown parser output, interleaved tool calls, thinking,
+`ShadowListUtilsAssistantReplyMessage` renders vendored Enriched Markdown, interleaved tool calls, thinking,
 sources and follow-ups. Copy, share, regenerate, retry, variant selection, feedback, follow-up and link callbacks
 are available on the list and standalone reply. Thinking and tool disclosure stays keyed to the message across
 streaming updates. Row layouts capture immutable model and presentation snapshots before background measurement.
@@ -553,7 +565,7 @@ Disabled dims and disables the primary touch target; configured swipe/menu actio
 independent. The labelled custom accessibility long-press action is offered when both callback
 and label exist, matching RN's existing handler even while the physical primary is disabled.
 Native gesture/menu ownership suppresses a primary release after presenting a menu; no copied
-RN press-delay timer is used. `closeSwipeActions(animated:)` closes an open reveal.
+RN press-delay timer is used. `closeSwipeActions(animated)` closes an open reveal.
 
 Android uses the existing `(Menu) -> Boolean` menu-populating callback, native PopupMenu and
 `BUTTON` / `LINK`. `onContextMenuWillShow` runs for a resolved current menu. `testID` maps to
